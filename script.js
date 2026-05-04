@@ -713,39 +713,72 @@
 
 
   const STORE_CNPJ_MAP = {
-    dd_horacio_costa: ['17457404000616'],
-    dd_rio_verde: ['17457404003399'],
-    dd_cesar_lattes: ['17457404001698'],
-    dd_aparecida_goiania: ['17457404003046'],
-    dd_jd_botanico: ['17457404002821'],
-    dd_br_070: ['17457404000101'],
+    // Rede Dia a Dia — reconhecimento XML por CNPJ do destinatário
     dd_aguas_claras: ['17457404001779'],
-    dd_planaltina_go: ['17457404001426'],
-    dd_planaltina_df: ['17457404002236'],
-    dd_samambaia: ['17457404002155'],
-    dd_mestre_d_armas: ['17457404003127'],
+    dd_aguas_lindas: ['17457404001000'],
+    dd_aparecida_goiania: ['17457404003046'],
+    dd_br_070: ['17457404000101'],
+    dd_brazlandia: ['17457404002317'],
+    dd_caldas_novas: ['17457404001183'],
+    dd_cd: ['17457404000969'],
+    dd_ceilandia_centro: ['17457404001850'],
+    dd_ceilandia_norte: ['17457404004018'],
     dd_ceilandia_sul: ['17457404001264'],
+    dd_cesar_lattes: ['17457404001698'],
+    dd_eptg: ['17457404003550'],
+    dd_formosa: ['17457404003801'],
+    dd_furnas: ['17457404003631'],
+    dd_gama: ['17457404003535'],
+    dd_goianesia: ['17457404002660'],
     dd_guara: ['17457404002074'],
-    dd_sobradinho: ['17457404000292'],
+    dd_gurupi: ['17457404002740'],
+    dd_horacio_costa: ['17457404000616'],
+    dd_itumbiara: ['17457404003984'],
+    dd_jd_botanico: ['17457404002821'],
+    dd_lem: ['17457404001930'],
     dd_luziania: ['17457404000705'],
+    dd_mestre_d_armas: ['17457404003127'],
+    dd_novo_gama: ['17457404001507'],
+    dd_park_jk: ['17457404003712'],
+    dd_planaltina_df: ['17457404002236'],
+    dd_planaltina_go: ['17457404001426'],
+    dd_recanto: ['17457404003470'],
+    dd_riacho: ['17457404003208'],
+    dd_rio_verde: ['17457404003399'],
+    dd_samambaia: ['17457404002155'],
     dd_santo_antonio: ['17457404000888'],
     dd_sia: ['17457404000373'],
-    dd_ceilandia_centro: ['17457404001850'],
-    dd_vicente_pires: ['17457404002589', '17457404002406'],
-    dd_aguas_lindas: ['17457404001000'],
-    dd_novo_gama: ['17457404001507'],
+    dd_sobradinho: ['17457404000292'],
     dd_taguatinga_sul: ['17457404000454'],
-    dd_gama: ['17457404000535'],
-    dd_recanto: ['17457404003470'],
-    dd_eptg: ['17457404003550'],
-    dd_park_jk: ['17457404003712'],
-    dd_formosa: ['17457404003801'],
-    dd_riacho: ['17457404003208'],
-    dd_ceilandia_norte: ['17457404004018'],
-    dd_furnas: ['17457404003631'],
-    dd_itumbiara: ['17457404003984']
-  };
+    dd_vicente_pires: ['17457404002406'],
+    dd_vicente_pires_2: ['17457404002589'],
 
+    // Rede Comper/Fort — reconhecimento XML por CNPJ do destinatário
+    comper_aguas_claras: ['09477652000358'],
+    comper_asa_sul: ['09477652005155'],
+    comper_gama: ['09477652005317'],
+    comper_sobradinho: ['09477652004930'],
+    fort_ceilandia: ['09477652004039', '09477652000439'],
+    fort_planaltina: ['09477652002482'],
+    fort_recanto_das_emas: ['09477652012364'],
+    fort_sol_nascente: ['09477652007522'],
+    fort_taguatinga: ['09477652005074'],
+    fort_valparaiso: ['09477652000277'],
+
+    // Rede Costa — reconhecimento XML por CNPJ do destinatário
+    costa_taquari: ['27289076001611'],
+    costa_unieuro: ['27289076001026'],
+    costa_goiania: ['27289076000569'],
+    costa_laranjeiras: ['27289076001964'],
+    costa_taguatinga: ['27289076001450'],
+    costa_ade: ['27289076001379'],
+    costa_valparaiso: ['27289076000216'],
+    costa_luziania: ['27289076001298'],
+    costa_santa_maria: ['27289076001530'],
+    costa_t_63: ['27289076000135'],
+    costa_go_070: ['27289076000640'],
+    costa_avenida_goias: ['27289076000801']
+  };
   function enrichStoreCnpjs(stores){
     return (stores || []).map(store => {
       const existing = Array.isArray(store.cnpjs) ? store.cnpjs : (store.cnpj ? [store.cnpj] : []);
@@ -3818,9 +3851,16 @@
 
 
   function importIssueStillRelevant(i){
-    if (i.type !== 'PDF') return true;
     const msg = String(i.message || '');
     const detail = String(i.detail || '').trim();
+
+    if (i.type === 'XML' && (/Loja não reconhecida/i.test(msg) || /Loja não reconhecida no XML/i.test(detail))) {
+      const cnpjMatch = detail.match(/CNPJ\s*([\d\.\/-]+)/i);
+      if (cnpjMatch && matchStoreByCnpj(cnpjMatch[1])) return false;
+      return true;
+    }
+
+    if (i.type !== 'PDF') return true;
 
     if (/Loja não reconhecida/i.test(msg) || /Loja não reconhecida no PDF/i.test(detail)) {
       const match = detail.match(/Loja não reconhecida no PDF:\s*(.+?)(?:\s*\(pedido|\.|$)/i);

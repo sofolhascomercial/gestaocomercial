@@ -387,3 +387,20 @@ Recomendação após publicar no GitHub Pages: limpar cache com Ctrl + F5.
 - Usuários comerciais padrão recuperados se a base da nuvem vier sem usuários.
 - Leitura/gravação do Firestore com limite de espera para não travar a tela de login.
 - Inicialização local automática caso o Firebase esteja sem regras ou indisponível.
+
+## v42 — Reconhecimento de lojas por CNPJ no XML
+
+Atualização focada em importação XML:
+
+- Adicionado reconhecimento automático de lojas pelo CNPJ do destinatário da NF-e.
+- Incluídos CNPJs informados para as redes Dia a Dia, Comper/Fort e Costa.
+- Corrigido vínculo de Vicente Pires Rua 12 e Vicente Pires Rua 04:
+  - Rua 12 = DD VICENTE PIRES
+  - Rua 04 = DD VICENTE PIRES 2
+- Incluídas lojas Dia a Dia que estavam ausentes no cadastro base:
+  - DD BRAZLÂNDIA
+  - DD CALDAS NOVAS
+  - DIA A DIA CD
+- Alertas antigos de XML com “Loja não reconhecida” deixam de aparecer quando o CNPJ passar a ser reconhecido pelo cadastro atualizado.
+
+Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adicionados porque não estavam visíveis/preenchidos na lista enviada.
