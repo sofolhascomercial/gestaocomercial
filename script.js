@@ -378,7 +378,7 @@
       }
       let cloudData = null;
       if (this.usingCloud) {
-        try { cloudData = await this.loadCloudPayload(); } catch(e) { console.warn('Falha ao ler dados do Firestore. Usando base local.', e); }
+        try { cloudData = await withTimeout(this.loadCloudPayload(), 6000, 'Leitura do Firestore demorou.'); } catch(e) { console.warn('Falha ao ler dados do Firestore. Usando base local.', e); }
       }
       let data = chooseStartupData(localData, cloudData);
       if (!data) data = this.seed();
@@ -488,7 +488,7 @@
               .catch(e => console.warn('Falha ao sincronizar Firestore', e));
           }, 300);
         } else {
-          try { await this.saveCloudPayload(updatedAt); } catch(e) { console.warn('Falha ao sincronizar Firestore', e); }
+          try { await withTimeout(this.saveCloudPayload(updatedAt), 6000, 'Sincronização do Firestore demorou.'); } catch(e) { console.warn('Falha ao sincronizar Firestore', e); }
         }
       }
     },
@@ -6151,14 +6151,28 @@
       e.preventDefault();
       const user = normalizeLogin($('#loginUser').value);
       const pass = $('#loginPass').value.trim();
+
+      // Garante que os acessos padrão nunca sumam por dados antigos, cache ou Firestore vazio.
+      Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
       let found = (Store.data.users || []).find(u => normalizeLogin(u.usuario) === user && String(u.senha || '') === pass);
 
       // Acesso ADM de recuperação: garante que o login principal nunca fique bloqueado
-      // por senha antiga salva no navegador/localStorage.
+      // por senha antiga salva no navegador/localStorage/Firebase.
       if (!found && user === normalizeLogin(ADMIN_USER.usuario) && pass === ADMIN_USER.senha) {
-        found = { ...ADMIN_USER };
+        found = normalizeSystemUser({ ...ADMIN_USER });
         Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
         await Store.save();
+      }
+
+      // Recuperação dos usuários comerciais padrão quando a nuvem/cache vier sem eles.
+      if (!found) {
+        const defCommercial = DEFAULT_COMMERCIAL_USERS.find(u => normalizeLogin(u.usuario) === user && String(u.senha || '') === pass);
+        if (defCommercial) {
+          found = normalizeSystemUser({...defCommercial, permissions:[...(defCommercial.permissions || [])]});
+          const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
+          if (!exists) Store.data.users.push(found);
+          await Store.save();
+        }
       }
 
       if (!found) return toast('Usuário ou senha inválidos.', 'error');
@@ -6929,7 +6943,20 @@
   };
 
   document.addEventListener('DOMContentLoaded', async ()=>{
-    await Store.init();
+    try {
+      await Store.init();
+    } catch(e) {
+      console.warn('Falha ao iniciar dados. Usando base inicial local para liberar login.', e);
+      try {
+        Store.usingCloud = false;
+        Store.cloud = null;
+        Store.data = migrate(Store.seed());
+        await persistLocalSnapshot(Store.data);
+        $('#syncPill') && ($('#syncPill').textContent = 'Modo local');
+      } catch(seedError) {
+        console.error('Falha crítica ao criar base inicial.', seedError);
+      }
+    }
     bindGlobal();
     renderLogin();
   });

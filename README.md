@@ -380,3 +380,10 @@ Recomendação após publicar no GitHub Pages: limpar cache com Ctrl + F5.
 - Logo duplicada também na raiz do projeto para evitar falha de caminho no GitHub Pages.
 - `index.html` passa a buscar a logo na raiz e usa `assets/` como fallback.
 - `firebase-config.js` preenchido com o projeto `gestaocomercial-a1e81`.
+
+
+## v41 - Correção de login e inicialização Firebase
+- Login ADM `gerenciacomercial / sofolhas2026` protegido contra cache/Firebase vazio.
+- Usuários comerciais padrão recuperados se a base da nuvem vier sem usuários.
+- Leitura/gravação do Firestore com limite de espera para não travar a tela de login.
+- Inicialização local automática caso o Firebase esteja sem regras ou indisponível.
