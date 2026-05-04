@@ -7002,22 +7002,33 @@
     }
   };
 
-  document.addEventListener('DOMContentLoaded', async ()=>{
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // Liga o formulário de login imediatamente. Assim o acesso ADM/loja funciona mesmo
+    // se Firestore, IndexedDB ou cache demorarem para iniciar em segundo plano.
     try {
-      await Store.init();
-    } catch(e) {
-      console.warn('Falha ao iniciar dados. Usando base inicial local para liberar login.', e);
-      try {
-        Store.usingCloud = false;
-        Store.cloud = null;
-        Store.data = migrate(Store.seed());
-        await persistLocalSnapshot(Store.data);
-        $('#syncPill') && ($('#syncPill').textContent = 'Modo local');
-      } catch(seedError) {
-        console.error('Falha crítica ao criar base inicial.', seedError);
-      }
+      bindGlobal();
+      renderLogin();
+    } catch(bindError) {
+      console.error('Falha ao ligar tela de login.', bindError);
     }
-    bindGlobal();
-    renderLogin();
+
+    Store.init()
+      .then(() => {
+        $('#syncPill') && ($('#syncPill').textContent = Store.usingCloud ? 'Firestore ativo' : 'Modo local');
+        if (state.session) render();
+      })
+      .catch(async e => {
+        console.warn('Falha ao iniciar dados. Usando base inicial local para liberar login.', e);
+        try {
+          Store.usingCloud = false;
+          Store.cloud = null;
+          Store.data = migrate(Store.seed());
+          await persistLocalSnapshot(Store.data);
+          $('#syncPill') && ($('#syncPill').textContent = 'Modo local');
+          if (state.session) render();
+        } catch(seedError) {
+          console.error('Falha crítica ao criar base inicial.', seedError);
+        }
+      });
   });
 })();

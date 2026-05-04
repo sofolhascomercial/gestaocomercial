@@ -1,3 +1,11 @@
+# Sistema Comercial Só Folhas — v44
+
+Correção emergencial de login: o formulário agora é ligado imediatamente, antes do Firestore/IndexedDB terminar de carregar. Isso evita que o acesso fique bloqueado quando o Firebase, cache ou base local demoram ou falham.
+
+Mantém as correções anteriores: CNPJs XML Dia a Dia, Comper/Fort e Costa; logo na raiz e em assets; firebase-config.js no formato window.firebaseConfig.
+
+Após publicar no GitHub Pages, use Ctrl+F5 ou teste em janela anônima.
+
 ## v31 - Atendimento oculto no menu lateral
 
 - Removido o card fixo **Dúvidas ou suporte?** da lateral.
