@@ -374,3 +374,9 @@ Alterações aplicadas:
 - Mantidas as regras existentes de PDF/XML, Base de Vendas, Chamados, Estoque em Loja, Preços, Inventário, Quebras, Firebase e permissões.
 
 Recomendação após publicar no GitHub Pages: limpar cache com Ctrl + F5.
+
+
+## v40 - Correção de logo no GitHub Pages
+- Logo duplicada também na raiz do projeto para evitar falha de caminho no GitHub Pages.
+- `index.html` passa a buscar a logo na raiz e usa `assets/` como fallback.
+- `firebase-config.js` preenchido com o projeto `gestaocomercial-a1e81`.
