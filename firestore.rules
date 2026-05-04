@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Regra simples para testes. Para produção, use Firebase Authentication.
+    match /sistemas/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

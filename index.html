@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Só Folhas | Sistema Comercial</title>
+  <link rel="icon" href="assets/logo-sofolhas-oficial.png" type="image/png" />
+  <link rel="stylesheet" href="style.css?v=39" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js" defer></script>
+  <script src="data/default-data.js?v=39" defer></script>
+  <script src="firebase-config.js" defer></script>
+  <script src="script.js?v=39" defer></script>
+</head>
+<body>
+  <div id="toastHost" class="toast-host"></div>
+
+  <main id="loginView" class="login-view">
+    <section class="login-card">
+      <div class="brand-lockup large">
+        <img src="assets/logo-sofolhas-oficial.png" alt="Só Folhas" />
+      </div>
+      <h1>Sistema Comercial Integrado</h1>
+      <p class="muted">Pedidos comerciais, análise de quebras, rupturas, faltas, qualidade e venda x quebra em uma única operação.</p>
+      <form id="loginForm" class="login-form">
+        <label>Usuário
+          <input id="loginUser" autocomplete="username" placeholder="Digite seu usuário" required />
+        </label>
+        <label>Senha
+          <input id="loginPass" autocomplete="current-password" type="password" placeholder="Digite a senha" required />
+        </label>
+        <button type="submit" class="btn btn-primary">Entrar no sistema</button>
+      </form>
+      <div class="sync-pill" id="syncPill">Modo local</div>
+    </section>
+  </main>
+
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand-lockup">
+        <img src="assets/logo-sofolhas-oficial.png" alt="Só Folhas" />
+      </div>
+      <nav id="navMenu" class="nav-menu"></nav>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div>
+          <button id="sidebarToggle" class="icon-btn" aria-label="Menu">☰</button>
+          <div>
+            <h2 id="pageTitle">Sistema de Pedidos Comerciais</h2>
+            <p id="pageSubtitle">Crie e acompanhe pedidos com base em vendas, entregas, inventário e quebras.</p>
+          </div>
+        </div>
+        <div class="profile-card">
+          <button id="mobileModeBtn" class="btn btn-soft mobile-mode-btn hidden" type="button">📱 Abrir modo mobile</button>
+          <span id="contextBadge" class="context-badge">Loja</span>
+          <span class="avatar">●</span>
+          <strong id="profileName">Usuário</strong>
+          <button class="icon-btn" id="logoutBtn" title="Sair">⎋</button>
+        </div>
+      </header>
+
+      <section id="viewRoot" class="view-root"></section>
+    </section>
+  </div>
+
+  <dialog id="modal" class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle">Detalhes</h3>
+      <button class="icon-btn" onclick="window.App.closeModal()">×</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+  </dialog>
+</body>
+</html>
