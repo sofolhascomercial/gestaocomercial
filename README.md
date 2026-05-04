@@ -404,3 +404,11 @@ Atualização focada em importação XML:
 - Alertas antigos de XML com “Loja não reconhecida” deixam de aparecer quando o CNPJ passar a ser reconhecido pelo cadastro atualizado.
 
 Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adicionados porque não estavam visíveis/preenchidos na lista enviada.
+
+
+## v43 - Correção de login
+
+- Reforçado login de recuperação para ADM, usuários comerciais e lojas/promotores.
+- Login padrão não depende mais de Firebase, cache local ou Firestore carregado para liberar acesso.
+- Salvamento da recuperação de usuários acontece em segundo plano, sem travar a entrada.
+- Mantido reconhecimento XML por CNPJ da v42.

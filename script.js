@@ -6192,31 +6192,51 @@
       const user = normalizeLogin($('#loginUser').value);
       const pass = $('#loginPass').value.trim();
 
-      // Garante que os acessos padrão nunca sumam por dados antigos, cache ou Firestore vazio.
-      Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
-      let found = (Store.data.users || []).find(u => normalizeLogin(u.usuario) === user && String(u.senha || '') === pass);
+      let found = null;
 
-      // Acesso ADM de recuperação: garante que o login principal nunca fique bloqueado
-      // por senha antiga salva no navegador/localStorage/Firebase.
+      try {
+        // Garante que o cadastro principal exista mesmo se Firebase/localStorage vier vazio ou corrompido.
+        if (!Store.data || typeof Store.data !== 'object') Store.data = Store.seed();
+        Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores, window.DEFAULT_STORES || []));
+        Store.data.deletedCommercialUsers ||= [];
+        Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
+        found = (Store.data.users || []).find(u => normalizeLogin(u.usuario) === user && String(u.senha || '') === pass);
+      } catch(loginDataError) {
+        console.warn('Falha ao preparar base de usuários. Usando acessos padrão.', loginDataError);
+        try { Store.data = migrate(Store.seed()); } catch(_) { Store.data = Store.seed(); }
+      }
+
+      // Acesso ADM de recuperação: nunca depende da nuvem, cache ou cadastro salvo.
       if (!found && user === normalizeLogin(ADMIN_USER.usuario) && pass === ADMIN_USER.senha) {
         found = normalizeSystemUser({ ...ADMIN_USER });
-        Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
-        await Store.save();
       }
 
       // Recuperação dos usuários comerciais padrão quando a nuvem/cache vier sem eles.
       if (!found) {
         const defCommercial = DEFAULT_COMMERCIAL_USERS.find(u => normalizeLogin(u.usuario) === user && String(u.senha || '') === pass);
-        if (defCommercial) {
-          found = normalizeSystemUser({...defCommercial, permissions:[...(defCommercial.permissions || [])]});
-          const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
-          if (!exists) Store.data.users.push(found);
-          await Store.save();
-        }
+        if (defCommercial) found = normalizeSystemUser({...defCommercial, permissions:[...(defCommercial.permissions || [])]});
+      }
+
+      // Recuperação dos usuários de loja/promotor pelo cadastro padrão.
+      if (!found) {
+        const defStore = (window.DEFAULT_STORES || []).find(s => normalizeLogin(s.usuario) === user && String(s.senha || '') === pass);
+        if (defStore) found = normalizeSystemUser({ usuario:defStore.usuario, senha:defStore.senha, nome:defStore.nome, role:'store', storeId:defStore.id, active:defStore.ativo !== false });
       }
 
       if (!found) return toast('Usuário ou senha inválidos.', 'error');
       if (found.active === false) return toast('Usuário inativo. Fale com o administrador.', 'error');
+
+      // Atualiza a base em segundo plano, mas não bloqueia a entrada do usuário.
+      try {
+        Store.data ||= Store.seed();
+        Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
+        const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
+        if (!exists) Store.data.users.push(found);
+        Store.save().catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
+      } catch(saveLoginUserError) {
+        console.warn('Falha ao persistir usuário recuperado.', saveLoginUserError);
+      }
+
       state.session = normalizeSystemUser({ ...found });
       state.page = isBackofficeUser(state.session) ? firstAccessibleAdminPage(state.session) : 'inicio-loja';
       render();
