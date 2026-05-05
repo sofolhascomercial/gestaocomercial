@@ -431,8 +431,23 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Salvamento da recuperação de usuários acontece em segundo plano, sem travar a entrada.
 - Mantido reconhecimento XML por CNPJ da v42.
 
-## v47 — Histórico de erros
+## v48 — Histórico de erros
 
 - Adicionada opção **Limpar** na área de Divergências de reconhecimento para remover o histórico de erros da tela sem apagar entregas, notas ou XML/PDF importados.
 - Adicionada opção **Ocultar corrigidos** para esconder divergências que já passaram a ser reconhecidas pelo cadastro atual.
 - Linhas de erro agora são clicáveis e abrem detalhes com CNPJ, NF, loja vinculada quando encontrada e ações para limpar erro individual, erros iguais ou erros do mesmo arquivo.
+
+
+## v48 - Correção das opções do histórico de erros
+- Corrigido clique no botão **Opções** das divergências de reconhecimento.
+- A tabela agora usa evento interno por `data-issue-key`, sem depender de `onclick` inline.
+- O modal de detalhe do erro ganhou abertura com fallback para evitar falha silenciosa.
+- Mantida a limpeza de erros sem excluir XML/PDF, entregas ou dados comerciais.
+
+
+## v49 — Reconhecimento XML por CNPJ reforçado
+
+- Reconhecimento de XML por CNPJ agora funciona mesmo se `data/default-data.js` estiver antigo ou não carregar no cache.
+- Adicionado mapa oficial CNPJ → loja com nome/rede para Dia a Dia, Comper/Fort e Costa.
+- Histórico de erros passa a permitir vincular manualmente um CNPJ não reconhecido à loja correta.
+- Após vincular CNPJ, reimporte o XML/ZIP para registrar as notas.

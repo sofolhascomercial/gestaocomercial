@@ -779,6 +779,103 @@
     costa_go_070: ['27289076000640'],
     costa_avenida_goias: ['27289076000801']
   };
+
+  const STORE_CNPJ_INFO = {
+    // Rede Dia a Dia
+    '17457404001779': {id:'dd_aguas_claras', nome:'DD ÁGUAS CLARAS', rede:'DIA A DIA'},
+    '17457404001000': {id:'dd_aguas_lindas', nome:'DD ÁGUAS LINDAS', rede:'DIA A DIA'},
+    '17457404003046': {id:'dd_aparecida_goiania', nome:'DD APARECIDA DE GOIÂNIA', rede:'DIA A DIA'},
+    '17457404002317': {id:'dd_brazlandia', nome:'DD BRAZLÂNDIA', rede:'DIA A DIA'},
+    '17457404001183': {id:'dd_caldas_novas', nome:'DD CALDAS NOVAS', rede:'DIA A DIA'},
+    '17457404000969': {id:'dd_cd', nome:'DIA A DIA CD', rede:'DIA A DIA'},
+    '17457404000101': {id:'dd_br_070', nome:'DD BR 070', rede:'DIA A DIA'},
+    '17457404001850': {id:'dd_ceilandia_centro', nome:'DD CEILÂNDIA CENTRO', rede:'DIA A DIA'},
+    '17457404001264': {id:'dd_ceilandia_sul', nome:'DD P SUL', rede:'DIA A DIA'},
+    '17457404001698': {id:'dd_cesar_lattes', nome:'DD CÉSAR LATTES', rede:'DIA A DIA'},
+    '17457404003535': {id:'dd_gama', nome:'DD GAMA', rede:'DIA A DIA'},
+    '17457404002660': {id:'dd_goianesia', nome:'DD GOIANÉSIA', rede:'DIA A DIA'},
+    '17457404002074': {id:'dd_guara', nome:'DD GUARÁ', rede:'DIA A DIA'},
+    '17457404002740': {id:'dd_gurupi', nome:'DD GURUPI', rede:'DIA A DIA'},
+    '17457404000616': {id:'dd_horacio_costa', nome:'DD HORÁCIO COSTA', rede:'DIA A DIA'},
+    '17457404002821': {id:'dd_jd_botanico', nome:'DD JARDIM BOTÂNICO', rede:'DIA A DIA'},
+    '17457404001930': {id:'dd_lem', nome:'DD LEM-BA', rede:'DIA A DIA'},
+    '17457404000705': {id:'dd_luziania', nome:'DD LUZIÂNIA', rede:'DIA A DIA'},
+    '17457404001507': {id:'dd_novo_gama', nome:'DD NOVO GAMA', rede:'DIA A DIA'},
+    '17457404002236': {id:'dd_planaltina_df', nome:'DD PLANALTINA-DF', rede:'DIA A DIA'},
+    '17457404001426': {id:'dd_planaltina_go', nome:'DD PLANALTINA-GO', rede:'DIA A DIA'},
+    '17457404003399': {id:'dd_rio_verde', nome:'DD RIO VERDE', rede:'DIA A DIA'},
+    '17457404000888': {id:'dd_santo_antonio', nome:'DD SANTO ANTÔNIO', rede:'DIA A DIA'},
+    '17457404000373': {id:'dd_sia', nome:'DD SIA', rede:'DIA A DIA'},
+    '17457404000292': {id:'dd_sobradinho', nome:'DD SOBRADINHO', rede:'DIA A DIA'},
+    '17457404000454': {id:'dd_taguatinga_sul', nome:'DD TAGUATINGA SUL', rede:'DIA A DIA'},
+    '17457404002406': {id:'dd_vicente_pires', nome:'DD VICENTE PIRES', rede:'DIA A DIA'},
+    '17457404002589': {id:'dd_vicente_pires_2', nome:'DD VICENTE PIRES 2', rede:'DIA A DIA'},
+    '17457404003127': {id:'dd_mestre_d_armas', nome:'DD MESTRE DARMAS', rede:'DIA A DIA'},
+    '17457404002155': {id:'dd_samambaia', nome:'DD SAMAMBAIA', rede:'DIA A DIA'},
+    '17457404003550': {id:'dd_eptg', nome:'DD EPTG', rede:'DIA A DIA'},
+    '17457404003470': {id:'dd_recanto', nome:'DD RECANTO DAS EMAS', rede:'DIA A DIA'},
+    '17457404003801': {id:'dd_formosa', nome:'DD FORMOSA', rede:'DIA A DIA'},
+    '17457404003208': {id:'dd_riacho', nome:'DD RIACHO FUNDO', rede:'DIA A DIA'},
+    '17457404003631': {id:'dd_furnas', nome:'DD FURNAS', rede:'DIA A DIA'},
+    '17457404003712': {id:'dd_park_jk', nome:'DD PARK JK LUZIÂNIA', rede:'DIA A DIA'},
+    '17457404003984': {id:'dd_itumbiara', nome:'DD ITUMBIARA', rede:'DIA A DIA'},
+    '17457404004018': {id:'dd_ceilandia_norte', nome:'DD CEILÂNDIA NORTE', rede:'DIA A DIA'},
+
+    // Rede Comper/Fort
+    '09477652000358': {id:'comper_aguas_claras', nome:'COMPER ÁGUAS CLARAS', rede:'COMPER/FORT'},
+    '09477652005155': {id:'comper_asa_sul', nome:'COMPER ASA SUL', rede:'COMPER/FORT'},
+    '09477652004039': {id:'fort_ceilandia', nome:'FORT CEILÂNDIA', rede:'COMPER/FORT'},
+    '09477652000439': {id:'fort_ceilandia', nome:'FORT CEILÂNDIA', rede:'COMPER/FORT'},
+    '09477652005317': {id:'comper_gama', nome:'COMPER GAMA', rede:'COMPER/FORT'},
+    '09477652002482': {id:'fort_planaltina', nome:'FORT PLANALTINA', rede:'COMPER/FORT'},
+    '09477652012364': {id:'fort_recanto_das_emas', nome:'FORT RECANTO DAS EMAS', rede:'COMPER/FORT'},
+    '09477652004930': {id:'comper_sobradinho', nome:'COMPER SOBRADINHO', rede:'COMPER/FORT'},
+    '09477652007522': {id:'fort_sol_nascente', nome:'FORT SOL NASCENTE', rede:'COMPER/FORT'},
+    '09477652005074': {id:'fort_taguatinga', nome:'FORT TAGUATINGA', rede:'COMPER/FORT'},
+    '09477652000277': {id:'fort_valparaiso', nome:'FORT VALPARAÍSO', rede:'COMPER/FORT'},
+
+    // Rede Costa
+    '27289076001611': {id:'costa_taquari', nome:'COSTA TAQUARI', rede:'COSTA'},
+    '27289076001026': {id:'costa_unieuro', nome:'COSTA UNIEURO', rede:'COSTA'},
+    '27289076000569': {id:'costa_goiania', nome:'COSTA GOIÂNIA', rede:'COSTA'},
+    '27289076001964': {id:'costa_laranjeiras', nome:'COSTA LARANJEIRAS', rede:'COSTA'},
+    '27289076001450': {id:'costa_taguatinga', nome:'COSTA TAGUATINGA', rede:'COSTA'},
+    '27289076001379': {id:'costa_ade', nome:'COSTA ADE', rede:'COSTA'},
+    '27289076000216': {id:'costa_valparaiso', nome:'COSTA VALPARAÍSO', rede:'COSTA'},
+    '27289076001298': {id:'costa_luziania', nome:'COSTA LUZIÂNIA', rede:'COSTA'},
+    '27289076001530': {id:'costa_santa_maria', nome:'COSTA SANTA MARIA', rede:'COSTA'},
+    '27289076000135': {id:'costa_t_63', nome:'COSTA T-63', rede:'COSTA'},
+    '27289076000640': {id:'costa_go_070', nome:'COSTA GO-070', rede:'COSTA'},
+    '27289076000801': {id:'costa_avenida_goias', nome:'COSTA AVENIDA GOIÁS', rede:'COSTA'}
+  };
+
+  function officialStoreInfoByCnpj(cnpj){
+    const digits = onlyDigits(cnpj);
+    return digits ? STORE_CNPJ_INFO[digits] || null : null;
+  }
+
+  function buildSyntheticStoreFromInfo(info, cnpj){
+    if (!info) return null;
+    return {
+      id: info.id,
+      nome: info.nome,
+      rede: info.rede,
+      cnpj: onlyDigits(cnpj),
+      cnpjs: [onlyDigits(cnpj)],
+      aliases: [info.nome],
+      usuario: info.id,
+      senha: '',
+      active: true,
+      synthetic: true
+    };
+  }
+
+  function enrichCustomCnpjLinks(data){
+    data ||= Store.data || {};
+    data.customCnpjStoreMap ||= {};
+    return data.customCnpjStoreMap;
+  }
+
   function enrichStoreCnpjs(stores){
     return (stores || []).map(store => {
       const existing = Array.isArray(store.cnpjs) ? store.cnpjs : (store.cnpj ? [store.cnpj] : []);
@@ -1137,6 +1234,16 @@
   function storeIdByMappedCnpj(cnpj){
     const digits = onlyDigits(cnpj);
     if (!digits) return '';
+
+    // 0) Vínculos manuais feitos pelo ADM na tela de erros.
+    const custom = Store.data?.customCnpjStoreMap || {};
+    if (custom[digits]) return custom[digits];
+
+    // 1) Mapa oficial por CNPJ.
+    const official = officialStoreInfoByCnpj(digits);
+    if (official?.id) return official.id;
+
+    // 2) Compatibilidade com mapa por storeId.
     for (const [storeId, cnpjs] of Object.entries(STORE_CNPJ_MAP || {})) {
       if ((cnpjs || []).map(onlyDigits).includes(digits)) return storeId;
     }
@@ -1166,6 +1273,12 @@
         } catch(_) {}
         return {...def, cnpjs: (STORE_CNPJ_MAP[mappedStoreId] || []).map(onlyDigits)};
       }
+
+      // Se o default-data.js não carregou no GitHub/cache, ainda assim reconhece o XML
+      // pelo mapa oficial informado pelo ADM. Isso evita "Loja não reconhecida"
+      // para CNPJs já cadastrados, mesmo com cadastro local antigo ou incompleto.
+      const official = officialStoreInfoByCnpj(digits);
+      if (official) return buildSyntheticStoreFromInfo(official, digits);
     }
 
     // 2) Fallback: procura em todas as lojas cadastradas, sempre normalizando pontuação.
@@ -4209,18 +4322,28 @@
     return store ? `${store.nome} • ${store.rede}` : '';
   }
 
+  function encodeIssueKeyForAttr(key){
+    return encodeURIComponent(String(key || ''));
+  }
+
+  function decodeIssueKeyFromAttr(token){
+    try { return decodeURIComponent(String(token || '')); }
+    catch(_) { return String(token || ''); }
+  }
+
   function renderImportIssues(issues){
     return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Arquivo</th><th>Tipo</th><th>Divergência</th><th>Detalhe</th><th>Ação</th></tr></thead><tbody>
       ${issues.map(i=>{
         const key = importIssueKey(i);
+        const encodedKey = encodeIssueKeyForAttr(key);
         const storeHint = importIssueStoreHint(i);
-        return `<tr class="clickable-row import-issue-row" onclick="App.openImportIssueOptions(${jsArg(key)})" title="Clique para ver opções do erro">
+        return `<tr class="clickable-row import-issue-row" data-import-issue-row="1" data-issue-key="${escapeHtml(encodedKey)}" title="Clique para ver opções do erro">
           <td>${formatDateTime(i.createdAt)}</td>
           <td>${escapeHtml(i.fileName||'')}</td>
           <td>${escapeHtml(i.kind||'')}</td>
           <td><span class="badge red">${escapeHtml(i.message||'')}</span></td>
           <td>${escapeHtml(i.detail||'')}${storeHint ? `<div class="small positive">CNPJ já vinculado: ${escapeHtml(storeHint)}</div>` : ''}</td>
-          <td><button class="btn btn-sm btn-soft" type="button" onclick="event.stopPropagation();App.openImportIssueOptions(${jsArg(key)})">Opções</button></td>
+          <td><button class="btn btn-sm btn-soft" type="button" data-import-issue-action="open" data-issue-key="${escapeHtml(encodedKey)}">Opções</button></td>
         </tr>`;
       }).join('') || `<tr><td colspan="6" class="center muted">Sem divergências registradas.</td></tr>`}
     </tbody></table></div>`;
@@ -4278,6 +4401,48 @@
     Store.save().then(()=>{ closeModal(); toast(`${removed} erro(s) semelhante(s) removido(s).`); render(); });
   }
 
+  function linkImportIssueCnpjToStore(key){
+    const issue = findImportIssueByKey(key);
+    if (!issue) return toast('Erro não encontrado.', 'warn');
+    const cnpj = onlyDigits(importIssueCnpj(issue));
+    const storeId = document.getElementById('issue-store-link-select')?.value || '';
+    if (!cnpj) return toast('CNPJ não identificado nesse erro.', 'warn');
+    if (!storeId) return toast('Selecione uma loja para vincular.', 'warn');
+    const store = (Store.data.stores || []).find(s => s.id === storeId) || (window.DEFAULT_STORES || []).find(s => s.id === storeId);
+    if (!store) return toast('Loja selecionada não encontrada no cadastro.', 'warn');
+
+    Store.data.customCnpjStoreMap ||= {};
+    Store.data.customCnpjStoreMap[cnpj] = storeId;
+
+    Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores || [], window.DEFAULT_STORES || []));
+    Store.data.stores = (Store.data.stores || []).map(s => {
+      if (s.id !== storeId) return s;
+      const cnpjs = unique([...(s.cnpjs || []), cnpj].map(onlyDigits).filter(Boolean));
+      return {...s, cnpj: s.cnpj || cnpj, cnpjs};
+    });
+
+    // Limpa da tela erros iguais do mesmo CNPJ, porque o vínculo já resolverá as próximas importações.
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => onlyDigits(importIssueCnpj(i)) !== cnpj);
+    const removed = before - Store.data.importIssues.length;
+
+    Store.save().then(() => {
+      closeModal();
+      toast(`CNPJ vinculado a ${store.nome}. ${removed} erro(s) desse CNPJ limpo(s). Importe o XML novamente para registrar as notas.`);
+      render();
+    });
+  }
+
+  function importIssueStoreSelectHtml(){
+    const stores = enrichStoreCnpjs(mergeCadastroById(Store.data?.stores || [], window.DEFAULT_STORES || []));
+    const options = stores
+      .filter(s => s?.id && s?.nome)
+      .sort((a,b) => `${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`, 'pt-BR'))
+      .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`)
+      .join('');
+    return `<select id="issue-store-link-select"><option value="">Selecionar loja...</option>${options}</select>`;
+  }
+
   function openImportIssueOptions(key){
     const issue = findImportIssueByKey(key);
     if (!issue) return toast('Erro não encontrado.', 'warn');
@@ -4296,6 +4461,19 @@
         <div><span>Status atual</span><strong class="${resolved ? 'positive' : 'negative'}">${resolved ? 'Já parece corrigido pelo cadastro atual' : 'Ainda pendente de conferência'}</strong></div>
         ${store ? `<div><span>Loja pelo CNPJ</span><strong>${escapeHtml(store.nome)} • ${escapeHtml(store.rede)}</strong></div>` : ''}
       </div>
+      ${cnpj && !store ? `
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head"><h4>Vincular CNPJ à loja</h4></div>
+          <p class="muted small">Use esta opção quando o XML trouxer uma loja nova ou quando o cadastro local ainda não tiver o CNPJ. Depois de vincular, importe o XML novamente.</p>
+          <div class="form-grid">
+            <label>Loja correta${importIssueStoreSelectHtml()}</label>
+          </div>
+          <div class="footer-actions">
+            <button class="btn" type="button" onclick="App.linkImportIssueCnpjToStore(${jsArg(key)})">Vincular CNPJ</button>
+          </div>
+        </div>
+      ` : ''}
+      ${cnpj && store ? `<div class="panel" style="margin-top:14px"><strong class="positive">Este CNPJ já está vinculado.</strong><p class="muted small">Limpe esse erro antigo e importe o XML novamente para registrar as notas com o cadastro atualizado.</p></div>` : ''}
       <div style="margin-top:14px">
         <h4>Detalhe completo</h4>
         <p class="muted">${escapeHtml(issue.detail || 'Sem detalhe adicional.')}</p>
@@ -6347,11 +6525,27 @@
     return JSON.stringify(String(value ?? ''));
   }
   function openModal(title, body){
+    const modal = $('#modal');
     $('#modalTitle').textContent = title;
     $('#modalBody').innerHTML = body;
-    $('#modal').showModal();
+    try {
+      if (typeof modal.showModal === 'function') {
+        if (modal.open) modal.close();
+        modal.showModal();
+      } else {
+        modal.setAttribute('open', '');
+      }
+    } catch(err) {
+      console.warn('Falha ao abrir modal. Usando abertura simples.', err);
+      modal.setAttribute('open', '');
+    }
   }
-  function closeModal(){ $('#modal').close(); }
+  function closeModal(){
+    const modal = $('#modal');
+    if (!modal) return;
+    try { modal.open ? modal.close() : modal.removeAttribute('open'); }
+    catch(_) { modal.removeAttribute('open'); }
+  }
 
   function bindGlobal(){
     $('#loginForm').addEventListener('submit', async e=>{
@@ -6422,6 +6616,22 @@
       document.body.classList.toggle('store-mobile', state.mobileMode);
       $('#mobileModeBtn').textContent = state.mobileMode ? '🖥️ Fechar modo mobile' : '📱 Abrir modo mobile';
       toast(state.mobileMode ? 'Modo mobile ativado para acesso pelo celular.' : 'Modo mobile desativado.');
+    });
+    document.addEventListener('click', e=>{
+      const issueButton = e.target.closest('[data-import-issue-action="open"]');
+      if (issueButton) {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = decodeIssueKeyFromAttr(issueButton.dataset.issueKey || '');
+        openImportIssueOptions(key);
+        return;
+      }
+      const issueRow = e.target.closest('[data-import-issue-row="1"]');
+      if (issueRow && !e.target.closest('button,a,input,select,textarea')) {
+        e.preventDefault();
+        const key = decodeIssueKeyFromAttr(issueRow.dataset.issueKey || '');
+        openImportIssueOptions(key);
+      }
     });
     $('[data-action="open-support"]')?.addEventListener('click', e=>{
       e.preventDefault();
@@ -7156,7 +7366,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
