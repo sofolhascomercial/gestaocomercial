@@ -1,4 +1,14 @@
-# Sistema Comercial Só Folhas — v44
+# Sistema Comercial Só Folhas — v45
+
+Versão com login imediato, Firebase em segundo plano e correção reforçada de reconhecimento XML por CNPJ.
+
+## Correção v45
+
+- XML agora reconhece loja diretamente pelo mapa oficial CNPJ -> loja, mesmo se a base antiga do Firebase/cache ainda não tiver `cnpjs` atualizados.
+- CNPJ do XML é comparado sempre sem máscara/pontuação.
+- O reconhecimento por CNPJ não depende mais do texto da razão social ou da rede inferida.
+- Corrige casos como `ATACADAO DIA A DIA S.A | CNPJ 17457404003399`, `17457404001698`, `17457404001930`, etc.
+
 
 Correção emergencial de login: o formulário agora é ligado imediatamente, antes do Firestore/IndexedDB terminar de carregar. Isso evita que o acesso fique bloqueado quando o Firebase, cache ou base local demoram ou falham.
 
@@ -414,7 +424,7 @@ Atualização focada em importação XML:
 Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adicionados porque não estavam visíveis/preenchidos na lista enviada.
 
 
-## v43 - Correção de login
+## v45 - Correção de login
 
 - Reforçado login de recuperação para ADM, usuários comerciais e lojas/promotores.
 - Login padrão não depende mais de Firebase, cache local ou Firestore carregado para liberar acesso.

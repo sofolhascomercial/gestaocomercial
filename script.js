@@ -1134,10 +1134,49 @@
     return {best, bestScore};
   }
 
+  function storeIdByMappedCnpj(cnpj){
+    const digits = onlyDigits(cnpj);
+    if (!digits) return '';
+    for (const [storeId, cnpjs] of Object.entries(STORE_CNPJ_MAP || {})) {
+      if ((cnpjs || []).map(onlyDigits).includes(digits)) return storeId;
+    }
+    return '';
+  }
+
   function matchStoreByCnpj(cnpj, redeHint=''){
     const digits = onlyDigits(cnpj);
     if (!digits) return null;
-    let candidates = Store.data.stores || [];
+
+    // 1) Procura primeiro pelo mapa oficial de CNPJ -> loja.
+    // Isso evita falhas quando a base salva no navegador/Firebase ainda está antiga
+    // ou quando o XML vem com CNPJ sem pontuação, como 17457404003399.
+    const mappedStoreId = storeIdByMappedCnpj(digits);
+    if (mappedStoreId) {
+      const stores = Store.data?.stores || [];
+      const direct = stores.find(s => s.id === mappedStoreId);
+      if (direct) return direct;
+
+      const def = (window.DEFAULT_STORES || []).find(s => s.id === mappedStoreId);
+      if (def) {
+        try {
+          Store.data ||= Store.seed();
+          Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores || [], window.DEFAULT_STORES || []));
+          const refreshed = (Store.data.stores || []).find(s => s.id === mappedStoreId);
+          if (refreshed) return refreshed;
+        } catch(_) {}
+        return {...def, cnpjs: (STORE_CNPJ_MAP[mappedStoreId] || []).map(onlyDigits)};
+      }
+    }
+
+    // 2) Fallback: procura em todas as lojas cadastradas, sempre normalizando pontuação.
+    // Não filtra por rede antes do CNPJ, pois a razão social do XML pode trazer texto genérico
+    // como ATACADAO DIA A DIA S.A ou SDB COMERCIO DE ALIMENTOS LTDA.
+    const allStores = Store.data?.stores || [];
+    const foundAny = allStores.find(s => (s.cnpjs || []).map(onlyDigits).includes(digits) || onlyDigits(s.cnpj) === digits);
+    if (foundAny) return foundAny;
+
+    // 3) Último fallback com rede, mantido apenas para cadastros manuais futuros.
+    let candidates = allStores;
     if (redeHint) {
       const nRede = normalize(redeHint);
       candidates = candidates.filter(s => normalize(s.rede).includes(nRede) || nRede.includes(normalize(s.rede).split(' ')[0]));
