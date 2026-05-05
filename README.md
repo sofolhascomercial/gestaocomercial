@@ -430,3 +430,9 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Login padrão não depende mais de Firebase, cache local ou Firestore carregado para liberar acesso.
 - Salvamento da recuperação de usuários acontece em segundo plano, sem travar a entrada.
 - Mantido reconhecimento XML por CNPJ da v42.
+
+## v47 — Histórico de erros
+
+- Adicionada opção **Limpar** na área de Divergências de reconhecimento para remover o histórico de erros da tela sem apagar entregas, notas ou XML/PDF importados.
+- Adicionada opção **Ocultar corrigidos** para esconder divergências que já passaram a ser reconhecidas pelo cadastro atual.
+- Linhas de erro agora são clicáveis e abrem detalhes com CNPJ, NF, loja vinculada quando encontrada e ações para limpar erro individual, erros iguais ou erros do mesmo arquivo.

@@ -987,3 +987,29 @@ body.store-user .view-root{background:linear-gradient(180deg,#0a1319,#081117);}
   .clear-hero{padding:16px;border-radius:18px;}
   .clear-task-card{min-height:auto;}
 }
+
+/* v47 - histórico de erros */
+.compact-actions{gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;}
+.clickable-row{cursor:pointer;transition:background .15s ease,border-color .15s ease;}
+.clickable-row:hover{background:rgba(55,196,90,.08);}
+.import-issue-row td{vertical-align:top;}
+.issue-detail-box{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:4px;
+}
+.issue-detail-box>div{
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#0c1820;
+  padding:10px 12px;
+}
+.issue-detail-box span{
+  display:block;
+  font-size:.78rem;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+.issue-detail-box strong{display:block;color:var(--text);word-break:break-word;}
+@media(max-width:720px){.issue-detail-box{grid-template-columns:1fr;}}

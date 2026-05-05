@@ -3782,8 +3782,16 @@
       </div>
 
       <div class="card" style="margin-top:14px">
-        <h3>Divergências de reconhecimento</h3>
-        <p class="muted">Quando loja, produto, data, custo ou quantidade não forem reconhecidos no XML/PDF, o erro aparece aqui para conferência.</p>
+        <div class="panel-head">
+          <div>
+            <h3>Divergências de reconhecimento</h3>
+            <p class="muted">Quando loja, produto, data, custo ou quantidade não forem reconhecidos no XML/PDF, o erro aparece aqui para conferência.</p>
+          </div>
+          <div class="footer-actions compact-actions">
+            <button class="btn btn-sm btn-soft" type="button" onclick="App.cleanResolvedImportIssues()">Ocultar corrigidos</button>
+            <button class="btn btn-sm btn-danger" type="button" onclick="App.clearImportIssues()">Limpar</button>
+          </div>
+        </div>
         ${renderImportIssues(issues)}
       </div>
     `;
@@ -4176,10 +4184,130 @@
     Store.save().then(()=>{toast('Arquivo removido com todos os dados vinculados.'); render();});
   }
 
+  function importIssueKey(i){
+    return String(i?.id || [i?.fileName, i?.message, i?.detail, i?.createdAt, i?.importBatchId, i?.importGroupKey, i?.importId].join('||'));
+  }
+
+  function findImportIssueByKey(key){
+    return (Store.data.importIssues || []).find(i => importIssueKey(i) === String(key));
+  }
+
+  function importIssueCnpj(i){
+    const text = `${i?.detail || ''} ${i?.message || ''}`;
+    const match = text.match(/CNPJ\s*([\d\.\/-]{11,18})/i) || text.match(/(\d{14})/);
+    return match ? match[1] : '';
+  }
+
+  function importIssueNf(i){
+    const text = `${i?.detail || ''} ${i?.fileName || ''}`;
+    return (text.match(/NF\s*([\d\/-]+)/i) || [])[1] || '';
+  }
+
+  function importIssueStoreHint(i){
+    const cnpj = importIssueCnpj(i);
+    const store = cnpj ? matchStoreByCnpj(cnpj) : null;
+    return store ? `${store.nome} • ${store.rede}` : '';
+  }
+
   function renderImportIssues(issues){
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Arquivo</th><th>Tipo</th><th>Divergência</th><th>Detalhe</th></tr></thead><tbody>
-      ${issues.map(i=>`<tr><td>${formatDateTime(i.createdAt)}</td><td>${escapeHtml(i.fileName||'')}</td><td>${escapeHtml(i.kind||'')}</td><td><span class="badge red">${escapeHtml(i.message||'')}</span></td><td>${escapeHtml(i.detail||'')}</td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem divergências registradas.</td></tr>`}
+    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Arquivo</th><th>Tipo</th><th>Divergência</th><th>Detalhe</th><th>Ação</th></tr></thead><tbody>
+      ${issues.map(i=>{
+        const key = importIssueKey(i);
+        const storeHint = importIssueStoreHint(i);
+        return `<tr class="clickable-row import-issue-row" onclick="App.openImportIssueOptions(${jsArg(key)})" title="Clique para ver opções do erro">
+          <td>${formatDateTime(i.createdAt)}</td>
+          <td>${escapeHtml(i.fileName||'')}</td>
+          <td>${escapeHtml(i.kind||'')}</td>
+          <td><span class="badge red">${escapeHtml(i.message||'')}</span></td>
+          <td>${escapeHtml(i.detail||'')}${storeHint ? `<div class="small positive">CNPJ já vinculado: ${escapeHtml(storeHint)}</div>` : ''}</td>
+          <td><button class="btn btn-sm btn-soft" type="button" onclick="event.stopPropagation();App.openImportIssueOptions(${jsArg(key)})">Opções</button></td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="6" class="center muted">Sem divergências registradas.</td></tr>`}
     </tbody></table></div>`;
+  }
+
+  function clearImportIssues(){
+    const total = (Store.data.importIssues || []).filter(i => ['PDF','XML'].includes(i.type)).length;
+    if (!total) return toast('Não há divergências de XML/PDF para limpar.');
+    if (!confirm(`Limpar ${total} divergência(s) de reconhecimento da tela?\n\nIsso remove apenas o histórico de erros. Não exclui XML/PDF importado, notas, entregas ou dados comerciais.`)) return;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => !['PDF','XML'].includes(i.type));
+    Store.save().then(()=>{ toast('Histórico de erros limpo.'); render(); });
+  }
+
+  function cleanResolvedImportIssues(){
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => {
+      if (!['PDF','XML'].includes(i.type)) return true;
+      return importIssueStillRelevant(i);
+    });
+    const removed = before - (Store.data.importIssues || []).length;
+    Store.save().then(()=>{ toast(removed ? `${removed} erro(s) corrigido(s) ocultado(s).` : 'Nenhum erro corrigido para ocultar.'); render(); });
+  }
+
+  function clearSingleImportIssue(key){
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => importIssueKey(i) !== String(key));
+    if (Store.data.importIssues.length === before) return toast('Erro não encontrado.', 'warn');
+    Store.save().then(()=>{ closeModal(); toast('Erro removido do histórico.'); render(); });
+  }
+
+  function clearImportIssuesByFile(key){
+    const issue = findImportIssueByKey(key);
+    if (!issue) return toast('Erro não encontrado.', 'warn');
+    const fileName = issue.fileName || '';
+    if (!fileName) return toast('Este erro não possui arquivo vinculado.', 'warn');
+    if (!confirm(`Limpar todos os erros do arquivo:\n${fileName}?`)) return;
+    const before = Store.data.importIssues.length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.fileName !== fileName);
+    const removed = before - Store.data.importIssues.length;
+    Store.save().then(()=>{ closeModal(); toast(`${removed} erro(s) removido(s) do arquivo.`); render(); });
+  }
+
+  function clearSimilarImportIssues(key){
+    const issue = findImportIssueByKey(key);
+    if (!issue) return toast('Erro não encontrado.', 'warn');
+    const msg = issue.message || '';
+    const cnpj = onlyDigits(importIssueCnpj(issue));
+    const before = Store.data.importIssues.length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => {
+      if ((i.message || '') !== msg) return true;
+      if (cnpj) return onlyDigits(importIssueCnpj(i)) !== cnpj;
+      return false;
+    });
+    const removed = before - Store.data.importIssues.length;
+    Store.save().then(()=>{ closeModal(); toast(`${removed} erro(s) semelhante(s) removido(s).`); render(); });
+  }
+
+  function openImportIssueOptions(key){
+    const issue = findImportIssueByKey(key);
+    if (!issue) return toast('Erro não encontrado.', 'warn');
+    const cnpj = importIssueCnpj(issue);
+    const nf = importIssueNf(issue);
+    const store = cnpj ? matchStoreByCnpj(cnpj) : null;
+    const resolved = !importIssueStillRelevant(issue);
+    openModal('Opções do erro', `
+      <div class="issue-detail-box">
+        <div><span>Data</span><strong>${formatDateTime(issue.createdAt)}</strong></div>
+        <div><span>Arquivo</span><strong>${escapeHtml(issue.fileName || '—')}</strong></div>
+        <div><span>Tipo</span><strong>${escapeHtml(issue.type || issue.kind || '—')}</strong></div>
+        <div><span>Divergência</span><strong>${escapeHtml(issue.message || '—')}</strong></div>
+        ${cnpj ? `<div><span>CNPJ identificado</span><strong>${escapeHtml(cnpj)}</strong></div>` : ''}
+        ${nf ? `<div><span>NF</span><strong>${escapeHtml(nf)}</strong></div>` : ''}
+        <div><span>Status atual</span><strong class="${resolved ? 'positive' : 'negative'}">${resolved ? 'Já parece corrigido pelo cadastro atual' : 'Ainda pendente de conferência'}</strong></div>
+        ${store ? `<div><span>Loja pelo CNPJ</span><strong>${escapeHtml(store.nome)} • ${escapeHtml(store.rede)}</strong></div>` : ''}
+      </div>
+      <div style="margin-top:14px">
+        <h4>Detalhe completo</h4>
+        <p class="muted">${escapeHtml(issue.detail || 'Sem detalhe adicional.')}</p>
+      </div>
+      <div class="footer-actions">
+        <button class="btn btn-soft" type="button" onclick="navigator.clipboard?.writeText(${jsArg(issue.detail || issue.message || '')});App.closeModal();">Copiar detalhe</button>
+        <button class="btn btn-soft" type="button" onclick="App.clearSingleImportIssue(${jsArg(key)})">Limpar este erro</button>
+        <button class="btn btn-soft" type="button" onclick="App.clearSimilarImportIssues(${jsArg(key)})">Limpar erros iguais</button>
+        <button class="btn btn-danger" type="button" onclick="App.clearImportIssuesByFile(${jsArg(key)})">Limpar arquivo</button>
+      </div>
+      <p class="muted small">Limpar remove somente o registro do histórico de erros. Não apaga entregas, notas, XML/PDF ou dados comerciais.</p>
+    `);
   }
 
   function fileExt(fileName){
@@ -7028,7 +7156,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
