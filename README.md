@@ -451,3 +451,14 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Adicionado mapa oficial CNPJ → loja com nome/rede para Dia a Dia, Comper/Fort e Costa.
 - Histórico de erros passa a permitir vincular manualmente um CNPJ não reconhecido à loja correta.
 - Após vincular CNPJ, reimporte o XML/ZIP para registrar as notas.
+
+
+## v50
+- Reforçado reconhecimento de produtos no XML com catálogo ativo interno de segurança.
+- Evita erro de Produto não reconhecido quando `data/default-data.js` não carrega no GitHub/cache ou quando o Firebase traz base antiga sem produtos.
+- Mantém regras de produto: não usa produtos A GRANEL e preserva diferença entre Brócolis Americano e Filetado.
+
+
+### Complemento v50
+- Incluído mapa direto dos 40 produtos encontrados no ZIP XML Dia a Dia para evitar divergência de produto não reconhecido.
+- Exemplos corrigidos: ALFACE AMERICANA BDJ, QUIABO, PIMENTA DEDO DE MOÇA, PIMENTA DE CHEIRO, PIMENTÃO COLORIDO, JILÓ, COUVE PICADO UND e COUVE FLOR UND.

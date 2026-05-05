@@ -75,6 +75,686 @@
     .toLowerCase()
     .replace(/[^a-z0-9]+/g,'')
     .trim();
+
+  // Catálogo mínimo de produtos ativo dentro do script.
+  // Ele evita falha de reconhecimento no XML quando o arquivo data/default-data.js
+  // não carrega no GitHub/cache ou quando o Firebase traz uma base antiga sem produtos.
+  const FALLBACK_ACTIVE_PRODUCTS = [
+    {
+      "id": "abobora_italia_bdj",
+      "codigoMix": "BDJ AB. ITÁLIA",
+      "nomeSistema": "ABÓBORA ITÁLIA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ABOBORA ITALIA",
+        "ABOBORA ITALIA SO FOLHAS BDJ 300G",
+        "ABÓBORA ITÁLIA",
+        "ABÓBORA ITÁLIA BDJ",
+        "BDJ AB ITALIA",
+        "BDJ AB. ITÁLIA"
+      ]
+    },
+    {
+      "id": "abobora_menina_bdj",
+      "codigoMix": "BDJ AB. MENINA",
+      "nomeSistema": "ABÓBORA MENINA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ABOBORA MENINA",
+        "ABOBORA MENINA SO FOLHAS BDJ 300G",
+        "ABÓBORA MENINA",
+        "ABÓBORA MENINA BDJ",
+        "BDJ AB MENINA",
+        "BDJ AB. MENINA"
+      ]
+    },
+    {
+      "id": "alface_americana_bdj",
+      "codigoMix": "BDJ AMER. BDJ",
+      "nomeSistema": "ALFACE AMERICANA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE AMERICANA",
+        "ALFACE AMERICANA BDJ",
+        "ALFACE AMERICANA SO FOLHAS BDJ",
+        "BDJ AMER BDJ",
+        "BDJ AMER. BDJ"
+      ]
+    },
+    {
+      "id": "berinjela_bdj",
+      "codigoMix": "BDJ BERINJELA",
+      "nomeSistema": "BERINJELA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ BERINJELA",
+        "BERINJELA",
+        "BERINJELA BDJ",
+        "BERINJELA SO FOLHAS BDJ 300G",
+        "BERINGELA SO FOLHAS UN",
+        "BERINGELA"
+      ]
+    },
+    {
+      "id": "couve_flor_bdj",
+      "codigoMix": "BDJ COUVE-FLOR",
+      "nomeSistema": "COUVE-FLOR BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ COUVE FLOR",
+        "BDJ COUVE-FLOR",
+        "COUVE FLOR",
+        "COUVE FLOR SO FOLHAS UN",
+        "COUVE FLOR UND",
+        "COUVE-FLOR",
+        "COUVE-FLOR BDJ",
+        "COUVE-FLOR UND"
+      ]
+    },
+    {
+      "id": "jilo_bdj",
+      "codigoMix": "BDJ JILÓ",
+      "nomeSistema": "JILÓ BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ JILO",
+        "BDJ JILÓ",
+        "JILO",
+        "JILO SO FOLHAS BDJ 300G",
+        "JILÓ",
+        "JILÓ BDJ",
+        "JILO BDJ"
+      ]
+    },
+    {
+      "id": "mandioca_700g",
+      "codigoMix": "BDJ MANDIOCA 700G",
+      "nomeSistema": "MANDIOCA 700G",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ MANDIOCA 700G",
+        "MANDIOCA 700G"
+      ]
+    },
+    {
+      "id": "maxixe_bdj",
+      "codigoMix": "BDJ MAXIXE",
+      "nomeSistema": "MAXIXE BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ MAXIXE",
+        "MAXIXE",
+        "MAXIXE BDJ",
+        "MAXIXE SO FOLHAS BDJ 300G"
+      ]
+    },
+    {
+      "id": "milho_verde_bdj",
+      "codigoMix": "BDJ MILHO VERDE BDJ",
+      "nomeSistema": "MILHO VERDE BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ MILHO VERDE BDJ",
+        "MILHO VERDE",
+        "MILHO VERDE BDJ",
+        "MILHO VERDE SO FOLHAS BDJ"
+      ]
+    },
+    {
+      "id": "pepino_japones_bdj",
+      "codigoMix": "BDJ PEP. JAPON.",
+      "nomeSistema": "PEPINO JAPONÊS BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PEP JAPON",
+        "BDJ PEP. JAPON.",
+        "PEPINO JAPONES",
+        "PEPINO JAPONES SO FOLHAS BDJ 300G",
+        "PEPINO JAPONÊS",
+        "PEPINO JAPONÊS BDJ"
+      ]
+    },
+    {
+      "id": "pimenta_biquinho_bdj",
+      "codigoMix": "BDJ PIM. BIQUIN.",
+      "nomeSistema": "PIMENTA BIQUINHO BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PIM BIQUIN",
+        "BDJ PIM. BIQUIN.",
+        "PIMENTA BIQUINHO",
+        "PIMENTA BIQUINHO BDJ",
+        "PIMENTA BIQUINHO SO FOLHAS BDJ"
+      ]
+    },
+    {
+      "id": "pimenta_de_cheiro_bdj",
+      "codigoMix": "BDJ PIM. CHEIRO",
+      "nomeSistema": "PIMENTA DE CHEIRO BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PIM CHEIRO",
+        "BDJ PIM. CHEIRO",
+        "PIMENTA DE CHEIRO",
+        "PIMENTA DE CHEIRO BDJ",
+        "PIMENTA DE CHEIRO SO FOLHAS BDJ"
+      ]
+    },
+    {
+      "id": "pimentao_colorido_bdj",
+      "codigoMix": "BDJ PIM. COLOR.",
+      "nomeSistema": "PIMENTÃO COLORIDO BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PIM COLOR",
+        "BDJ PIM. COLOR.",
+        "PIMENTAO COLORIDO",
+        "PIMENTAO SO FOLHAS BDJ COLORIDO",
+        "PIMENTÃO COLORIDO",
+        "PIMENTÃO COLORIDO BDJ"
+      ]
+    },
+    {
+      "id": "pimenta_dedo_de_moca_bdj",
+      "codigoMix": "BDJ PIM. DEDO",
+      "nomeSistema": "PIMENTA DEDO DE MOÇA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PIM DEDO",
+        "BDJ PIM. DEDO",
+        "PIMENTA DEDO DE MOCA",
+        "PIMENTA DEDO DE MOCA SO FOLHAS BDJ",
+        "PIMENTA DEDO DE MOÇA",
+        "PIMENTA DEDO DE MOÇA BDJ"
+      ]
+    },
+    {
+      "id": "pimenta_malagueta_bdj",
+      "codigoMix": "BDJ PIM. MALAG.",
+      "nomeSistema": "PIMENTA MALAGUETA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ PIM MALAG",
+        "BDJ PIM. MALAG.",
+        "PIMENTA MALAGUETA",
+        "PIMENTA MALAGUETA BDJ",
+        "PIMENTA MALAGUETA SO FOLHAS BDJ"
+      ]
+    },
+    {
+      "id": "quiabo_bdj",
+      "codigoMix": "BDJ QUIABO",
+      "nomeSistema": "QUIABO BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ QUIABO",
+        "QUIABO",
+        "QUIABO BDJ",
+        "QUIABO SO FOLHAS",
+        "QUIABO SO FOLHAS 300G",
+        "QUIABO SO FOLHAS PC 300G"
+      ]
+    },
+    {
+      "id": "tomate_cereja_180g",
+      "codigoMix": "BDJ TOMATE CEREJA 180G",
+      "nomeSistema": "TOMATE CEREJA 180G",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ TOMATE CEREJA 180G",
+        "TOMATE CEREJA",
+        "TOMATE CEREJA 180G",
+        "TOMATE CEREJA SO FOLHAS",
+        "TOMATE CEREJA SO FOLHAS PC 180G"
+      ]
+    },
+    {
+      "id": "vagem_rasteira_bdj",
+      "codigoMix": "BDJ V. RASTEIRA",
+      "nomeSistema": "VAGEM RASTEIRA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ V RASTEIRA",
+        "BDJ V. RASTEIRA",
+        "VAGEM RASTEIRA",
+        "VAGEM RASTEIRA BDJ",
+        "VAGEM RASTEIRA SO FOLHAS 250G"
+      ]
+    },
+    {
+      "id": "vagem_branca_bdj",
+      "codigoMix": "BDJ VAGEM BCA",
+      "nomeSistema": "VAGEM BRANCA BDJ",
+      "tipo": "BANDEJA",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BDJ VAGEM BCA",
+        "VAGEM BCA",
+        "VAGEM BRANCA",
+        "VAGEM BRANCA BDJ",
+        "VAGEM SO FOLHAS 250G BCA"
+      ]
+    },
+    {
+      "id": "acelga_und",
+      "codigoMix": "FLG ACELGA",
+      "nomeSistema": "ACELGA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ACELGA",
+        "ACELGA SO FOLHAS",
+        "ACELGA SO FOLHAS UN",
+        "ACELGA UND",
+        "FLG ACELGA"
+      ]
+    },
+    {
+      "id": "agriao_und",
+      "codigoMix": "FLG AGRIAO",
+      "nomeSistema": "AGRIAO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "AGRIAO",
+        "AGRIAO SO FOLHAS",
+        "AGRIAO SO FOLHAS UN",
+        "AGRIAO UND",
+        "AGRIÃO",
+        "FLG AGRIAO"
+      ]
+    },
+    {
+      "id": "alecrin_und",
+      "codigoMix": "FLG ALECRIN",
+      "nomeSistema": "ALECRIN UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALECRIM",
+        "ALECRIM SO FOLHAS",
+        "ALECRIN",
+        "ALECRIN SO FOLHAS UN",
+        "ALECRIN UND",
+        "FLG ALECRIN"
+      ]
+    },
+    {
+      "id": "alho_poro_und",
+      "codigoMix": "FLG ALHO PORO",
+      "nomeSistema": "ALHO PORO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALHO PORO",
+        "ALHO PORO SO FOLHAS",
+        "ALHO PORO SO FOLHAS UN",
+        "ALHO PORO UND",
+        "FLG ALHO PORO"
+      ]
+    },
+    {
+      "id": "almeirao_und",
+      "codigoMix": "FLG ALMEIRAO",
+      "nomeSistema": "ALMEIRAO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALMEIRAO",
+        "ALMEIRAO SO FOLHAS",
+        "ALMEIRAO UND",
+        "ALMEIRÃO",
+        "FLG ALMEIRAO"
+      ]
+    },
+    {
+      "id": "alface_americana",
+      "codigoMix": "FLG AMERICANA",
+      "nomeSistema": "ALFACE AMERICANA",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE AMER SO FOLHAS",
+        "ALFACE AMERICANA",
+        "ALFACE AMERICANA SO FOLHAS",
+        "ALFACE AMERICANA SO FOLHAS UN",
+        "FLG AMERICANA"
+      ]
+    },
+    {
+      "id": "brocolis_americano",
+      "codigoMix": "FLG BROC AMER.",
+      "nomeSistema": "BRÓCOLIS AMERICANO",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BROCOLIS AMERICANO",
+        "BROCOLIS AMERICANO FLG",
+        "BROCOLIS AMERICANO SO FOLHAS",
+        "BROCOLIS AMERICANO SO FOLHAS UN",
+        "BROCOLIS AMERICANO SO FOLHAS BDJ 400G",
+        "BROCOLIS AMERICANO BDJ 400G",
+        "BRÓCOLIS AMERICANO",
+        "FLG BROC AMER."
+      ]
+    },
+    {
+      "id": "brocolis_comum",
+      "codigoMix": "FLG BROC COM",
+      "nomeSistema": "BRÓCOLIS COMUM",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "BROCOLIS COMUM",
+        "BROCOLIS COMUM FLG",
+        "BROCOLIS COMUM SO FOLHAS",
+        "BROCOLIS COMUM SO FOLHAS UN",
+        "BRÓCOLIS COMUM",
+        "FLG BROC COM"
+      ]
+    },
+    {
+      "id": "cebolinha",
+      "codigoMix": "FLG CEBOLA",
+      "nomeSistema": "CEBOLINHA",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "CEBOLINHA",
+        "CEBOLINHA SO FOLHAS",
+        "CEBOLINHA SO FOLHAS UN",
+        "FLG CEBOLA"
+      ]
+    },
+    {
+      "id": "cheiro_verde",
+      "codigoMix": "FLG CH.VERDE",
+      "nomeSistema": "CHEIRO VERDE",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "CH VERDE",
+        "CHEIRO VERDE",
+        "CHEIRO VERDE SO FOLHAS",
+        "CHEIRO VERDE SO FOLHAS UN FILETADO",
+        "FLG CH VERDE",
+        "FLG CH.VERDE"
+      ]
+    },
+    {
+      "id": "chicoria_und",
+      "codigoMix": "FLG CHICORIA",
+      "nomeSistema": "CHICORIA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "CHICORIA",
+        "CHICORIA UND",
+        "FLG CHICORIA"
+      ]
+    },
+    {
+      "id": "coentro_und",
+      "codigoMix": "FLG COENTRO",
+      "nomeSistema": "COENTRO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "COENTRO",
+        "COENTRO SO FOLHAS",
+        "COENTRO SO FOLHAS UN",
+        "COENTRO UND",
+        "FLG COENTRO"
+      ]
+    },
+    {
+      "id": "couve_und",
+      "codigoMix": "FLG COUVE",
+      "nomeSistema": "COUVE UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "COUVE",
+        "COUVE SO FOLHAS",
+        "COUVE SO FOLHAS UN",
+        "COUVE UND",
+        "FLG COUVE"
+      ]
+    },
+    {
+      "id": "couve_picada_200g",
+      "codigoMix": "FLG COUVE PIC",
+      "nomeSistema": "COUVE PICADA 200G",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "COUVE PICADA",
+        "COUVE PICADA 200G",
+        "COUVE PICADA SO FOLHAS",
+        "COUVE PICADO",
+        "COUVE PICADO UND",
+        "COUVE SO FOLHAS PICADA",
+        "FLG COUVE PIC"
+      ]
+    },
+    {
+      "id": "alface_crespa_und",
+      "codigoMix": "FLG CRESPA",
+      "nomeSistema": "ALFACE CRESPA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE CRESPA",
+        "ALFACE CRESPA SO FOLHAS",
+        "ALFACE CRESPA SO FOLHAS UN",
+        "ALFACE CRESPA UND",
+        "FLG CRESPA"
+      ]
+    },
+    {
+      "id": "espinafre_und",
+      "codigoMix": "FLG ESPINAFRE",
+      "nomeSistema": "ESPINAFRE UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ESPINAFRE",
+        "ESPINAFRE SO FOLHAS",
+        "ESPINAFRE SO FOLHAS UN",
+        "ESPINAFRE UND",
+        "FLG ESPINAFRE"
+      ]
+    },
+    {
+      "id": "hortela_und",
+      "codigoMix": "FLG HORTELA",
+      "nomeSistema": "HORTELÃ UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG HORTELA",
+        "HORTELA",
+        "HORTELA SO FOLHAS",
+        "HORTELA SO FOLHAS UN",
+        "HORTELÃ",
+        "HORTELÃ UND"
+      ]
+    },
+    {
+      "id": "alface_lisa_und",
+      "codigoMix": "FLG LISA",
+      "nomeSistema": "ALFACE LISA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE LISA",
+        "ALFACE LISA UND",
+        "FLG LISA"
+      ]
+    },
+    {
+      "id": "manjericao_und",
+      "codigoMix": "FLG MANJERICAO",
+      "nomeSistema": "MANJERICÃO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG MANJERICAO",
+        "MANJERICAO",
+        "MANJERICAO SO FOLHAS",
+        "MANJERICÃO",
+        "MANJERICÃO UND"
+      ]
+    },
+    {
+      "id": "alface_mimosa_und",
+      "codigoMix": "FLG MIMOSA",
+      "nomeSistema": "ALFACE MIMOSA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE MIMOSA",
+        "ALFACE MIMOSA UND",
+        "FLG MIMOSA"
+      ]
+    },
+    {
+      "id": "rabanete_und",
+      "codigoMix": "FLG RABANETE",
+      "nomeSistema": "RABANETE UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG RABANETE",
+        "RABANETE",
+        "RABANETE UND"
+      ]
+    },
+    {
+      "id": "alface_roxa_und",
+      "codigoMix": "FLG ROXA",
+      "nomeSistema": "ALFACE ROXA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "ALFACE ROXA",
+        "ALFACE ROXA SO FOLHAS",
+        "ALFACE ROXA SO FOLHAS UN",
+        "ALFACE ROXA UND",
+        "FLG ROXA"
+      ]
+    },
+    {
+      "id": "rucula_und",
+      "codigoMix": "FLG RUCULA",
+      "nomeSistema": "RÚCULA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG RUCULA",
+        "RUCULA",
+        "RUCULA SO FOLHAS",
+        "RUCULA SO FOLHAS UN",
+        "RÚCULA",
+        "RÚCULA UND"
+      ]
+    },
+    {
+      "id": "salsa_und",
+      "codigoMix": "FLG SALSA",
+      "nomeSistema": "SALSA UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG SALSA",
+        "SALSA",
+        "SALSA SO FOLHAS",
+        "SALSA SO FOLHAS UN",
+        "SALSA UND"
+      ]
+    },
+    {
+      "id": "salsao_und",
+      "codigoMix": "FLG SALSÃO",
+      "nomeSistema": "SALSÃO UND",
+      "tipo": "FOLHAGEM",
+      "situacao": "ATIVO",
+      "aliases": [
+        "FLG SALSÃO",
+        "SALSÃO",
+        "SALSÃO UND"
+      ]
+    }
+  ];
+
+  const XML_PRODUCT_DIRECT_ID = {
+    "ALFACE CRESPA": "alface_crespa_und",
+    "CHEIRO VERDE": "cheiro_verde",
+    "HORTELA": "hortela_und",
+    "COUVE": "couve_und",
+    "ALFACE AMERICANA": "alface_americana",
+    "CEBOLINHA": "cebolinha",
+    "COENTRO": "coentro_und",
+    "RUCULA": "rucula_und",
+    "MANJERICAO": "manjericao_und",
+    "AGRIAO": "agriao_und",
+    "ALFACE ROXA": "alface_roxa_und",
+    "ACELGA": "acelga_und",
+    "ESPINAFRE": "espinafre_und",
+    "ALECRIM": "alecrin_und",
+    "SALSA": "salsa_und",
+    "BROCOLIS AMERICANO": "brocolis_americano",
+    "COUVE PICADO UND": "couve_picada_200g",
+    "COUVE PICADA UND": "couve_picada_200g",
+    "ALHO PORO": "alho_poro_und",
+    "PIMENTA DE CHEIRO": "pimenta_de_cheiro_bdj",
+    "ALFACE LISA": "alface_lisa_und",
+    "QUIABO": "quiabo_bdj",
+    "ALFACE MIMOSA": "alface_mimosa_und",
+    "PIMENTAO COLORIDO": "pimentao_colorido_bdj",
+    "COUVE FLOR UND": "couve_flor_bdj",
+    "COUVE FLOR": "couve_flor_bdj",
+    "JILO": "jilo_bdj",
+    "RABANETE": "rabanete_und",
+    "ALFACE AMERICANA BDJ": "alface_americana_bdj",
+    "PEPINO JAPONES": "pepino_japones_bdj",
+    "BERINJELA": "berinjela_bdj",
+    "BERINGELA": "berinjela_bdj",
+    "PIMENTA MALAGUETA": "pimenta_malagueta_bdj",
+    "VAGEM RASTEIRA": "vagem_rasteira_bdj",
+    "PIMENTA DEDO DE MOCA": "pimenta_dedo_de_moca_bdj",
+    "PIMENTA DEDO DE MOÇA": "pimenta_dedo_de_moca_bdj",
+    "MANDIOCA 700G": "mandioca_700g",
+    "ABOBORA ITALIA": "abobora_italia_bdj",
+    "ABÓBORA ITÁLIA": "abobora_italia_bdj",
+    "VAGEM BRANCA": "vagem_branca_bdj",
+    "PIMENTA BIQUINHO": "pimenta_biquinho_bdj",
+    "MAXIXE": "maxixe_bdj",
+    "BROCOLIS COMUM": "brocolis_comum",
+    "ABOBORA MENINA": "abobora_menina_bdj",
+    "ABÓBORA MENINA": "abobora_menina_bdj",
+    "SALSAO": "salsao_und",
+    "SALSÃO": "salsao_und"
+  };
+
   const toNumber = (v) => {
     if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
     if (v == null || v === '') return 0;
@@ -512,6 +1192,16 @@
     });
   }
 
+
+
+  function ensureProductCatalogFallback(data){
+    data ||= {};
+    const defaults = Array.isArray(window.DEFAULT_PRODUCTS) && window.DEFAULT_PRODUCTS.length ? window.DEFAULT_PRODUCTS : FALLBACK_ACTIVE_PRODUCTS;
+    data.products = mergeCadastroById(data.products || [], defaults || []);
+    data.products = sanitizeProductMatchingRules(data.products);
+    return data.products;
+  }
+
   function validAdminPageIds({includeAdminOnly=false}={}){
     return ADMIN_PAGES.filter(p => includeAdminOnly || !p.adminOnly).map(p => p.id);
   }
@@ -648,7 +1338,7 @@
   function reconcileSalesReferences(data){
     if (!data || !Array.isArray(data.sales) || !data.sales.length) return;
     const stores = data.stores || [];
-    const products = data.products || [];
+    const products = ensureProductCatalogFallback(data) || [];
     const merged = new Map();
 
     data.sales.forEach(row => {
@@ -889,8 +1579,7 @@
     data = data || {};
     // Atualiza cadastro e equivalências mesmo quando já existem dados salvos no navegador.
     // Mantém dados operacionais, mas traz nomes, status, aliases e acessos mais recentes do arquivo do sistema.
-    data.products = mergeCadastroById(data.products, window.DEFAULT_PRODUCTS || []);
-    data.products = sanitizeProductMatchingRules(data.products);
+    ensureProductCatalogFallback(data);
     data.stores = enrichStoreCnpjs(mergeCadastroById(data.stores, window.DEFAULT_STORES || []));
     data.deletedCommercialUsers ||= [];
     data.users = syncUsersWithStores(data.users, data.stores, data.deletedCommercialUsers);
@@ -1065,7 +1754,9 @@
   }
 
   function matchProduct(rawName){
-    return matchProductFromList(rawName, Store.data.products || []);
+    try { ensureProductCatalogFallback(Store.data || (Store.data = Store.seed())); } catch(_) {}
+    const catalog = (Store.data?.products && Store.data.products.length ? Store.data.products : (window.DEFAULT_PRODUCTS || FALLBACK_ACTIVE_PRODUCTS));
+    return matchProductFromList(rawName, catalog || []);
   }
 
   function matchProductFromList(rawName, productList=[]){
@@ -1073,6 +1764,12 @@
     const rawOriginal = normalize(original);
     let raw = rawOriginal;
     if (!raw) return null;
+
+    const directId = XML_PRODUCT_DIRECT_ID[rawOriginal] || XML_PRODUCT_DIRECT_ID[rawOriginal.replace(/\bUND\b/g,'').replace(/\s+/g,' ').trim()];
+    if (directId) {
+      const directProduct = (productList || []).find(p => p.id === directId) || FALLBACK_ACTIVE_PRODUCTS.find(p => p.id === directId);
+      if (directProduct) return directProduct;
+    }
 
     // Correção de grafia comum na base de vendas: BERINGELA = BERINJELA.
     if (rawOriginal.includes('BERINGELA')) {
