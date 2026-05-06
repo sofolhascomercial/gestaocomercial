@@ -6947,9 +6947,9 @@
     render();
   }
 
-  async function saveStoreNameReconciliation(){
-    const rawName = String($('#aliasStoreRaw')?.value || '').trim();
-    const targetId = $('#aliasStoreTarget')?.value || '';
+  async function saveStoreNameReconciliationByValues(rawNameValue, targetIdValue, redeHint=''){
+    const rawName = String(rawNameValue || '').trim();
+    const targetId = String(targetIdValue || '').trim();
     const store = storeById(targetId) || allKnownStoresForSelection().find(s => s.id === targetId);
     if (!rawName) return toast('Informe o nome da loja como aparece na planilha/XML/PDF.', 'warn');
     if (!store) return toast('Selecione a loja correta do cadastro.', 'warn');
@@ -6957,19 +6957,28 @@
       ...store,
       id: store.id,
       nome: store.nome || store.nomeSistema || store.name || store.id,
-      rede: store.rede || store.network || ''
+      rede: store.rede || store.network || redeHint || ''
     };
     if (!storeById(normalizedStore.id)) {
       Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores || [], [normalizedStore]));
     }
-    const key = storeAliasKeyFromRaw(rawName, normalizedStore.rede || '');
+    const key = storeAliasKeyFromRaw(rawName, redeHint || normalizedStore.rede || '');
     const recs = nameReconciliationStore();
-    recs.stores[key] = {rawName, rede:normalizedStore.rede || '', targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    recs.stores[key] = {rawName, rede:redeHint || normalizedStore.rede || '', targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
     const affected = applyManualNameReconciliations();
-    const removed = clearStoreIssuesByRaw(rawName, normalizedStore.rede || '');
+    const removed = clearStoreIssuesByRaw(rawName, redeHint || normalizedStore.rede || '');
     await Store.save();
     toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    closeModal();
     render();
+  }
+
+  async function saveStoreNameReconciliation(){
+    await saveStoreNameReconciliationByValues($('#aliasStoreRaw')?.value || '', $('#aliasStoreTarget')?.value || '', $('#aliasStoreRedeHint')?.value || '');
+  }
+
+  async function saveStoreNameReconciliationFromModal(){
+    await saveStoreNameReconciliationByValues($('#aliasStoreModalRaw')?.value || '', $('#aliasStoreModalTarget')?.value || '', $('#aliasStoreModalRede')?.value || '');
   }
 
   async function deleteNameReconciliation(type, key){
@@ -6992,14 +7001,43 @@
     }, 50);
   }
 
-  function fillStoreReconciliation(rawName){
-    go('conciliacao');
-    setTimeout(()=>{
-      const input = $('#aliasStoreRaw');
-      if (input) { input.value = rawName || ''; input.focus(); input.scrollIntoView({behavior:'smooth', block:'center'}); }
-    }, 50);
+  function guessStoreForReconciliation(rawName, redeHint=''){
+    const stores = allKnownStoresForSelection();
+    return matchStoreInData(rawName, redeHint, stores) || null;
   }
 
+  function fillStoreReconciliation(rawName, redeHint=''){
+    go('conciliacao');
+    setTimeout(()=>{
+      const guess = guessStoreForReconciliation(rawName, redeHint);
+      const selectedId = guess?.id || '';
+      const input = $('#aliasStoreRaw');
+      const select = $('#aliasStoreTarget');
+      const redeInput = $('#aliasStoreRedeHint');
+      if (input) input.value = rawName || '';
+      if (redeInput) redeInput.value = redeHint || '';
+      if (select) select.value = selectedId;
+      openModal('Conciliar loja', `
+        <div class="issue-detail-box">
+          <div><span>Nome recebido</span><strong>${escapeHtml(rawName || '—')}</strong></div>
+          <div><span>Rede informada</span><strong>${escapeHtml(redeHint || '—')}</strong></div>
+          <div><span>Sugestão automática</span><strong>${escapeHtml(guess ? `${guess.rede} • ${guess.nome}` : 'Selecione manualmente')}</strong></div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <div class="form-grid compact-grid">
+            <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreModalRaw" value="${escapeHtml(rawName || '')}"></label>
+            <label>Loja correta no cadastro<select id="aliasStoreModalTarget">${storeSelectOptionsHtml(selectedId)}</select></label>
+          </div>
+          <input type="hidden" id="aliasStoreModalRede" value="${escapeHtml(redeHint || '')}">
+          <p class="muted small">Selecione a loja correta uma vez. O sistema usará essa conciliação para todos os erros iguais dessa loja.</p>
+          <div class="actions modal-actions">
+            <button class="btn" type="button" onclick="App.closeModal()">Cancelar</button>
+            <button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliationFromModal()">Salvar conciliação da loja</button>
+          </div>
+        </div>`);
+      setTimeout(()=>$('#aliasStoreModalTarget')?.focus(), 80);
+    }, 50);
+  }
 
   function renderNameReconciliationPanel(){
     const productPendencies = pendingProductAliasGroups().slice(0,120);
@@ -7041,6 +7079,7 @@
             <div class="form-grid compact-grid">
               <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreRaw" placeholder="Ex.: 005-VALPARSO"></label>
               <label>Loja correta no cadastro<select id="aliasStoreTarget">${storeSelectOptionsHtml()}</select></label>
+              <input type="hidden" id="aliasStoreRedeHint" value="">
             </div>
             <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliation()">Salvar conciliação da loja</button></div>
             <p class="muted small">Exemplo: 005-VALPARSO → COSTA VALPARAISO.</p>
@@ -7060,7 +7099,7 @@
           <div class="panel-head table-headline"><div><h3>Lojas pendentes para conciliar</h3><p class="muted">Lojas vindas com código, abreviação ou variação de grafia.</p></div><span class="badge amber">${fmt.format(storePendencies.length)}</span></div>
           <div class="table-wrap compact-table">
             <table><thead><tr><th>Nome recebido</th><th>Rede</th><th>Origem</th><th class="num">Registros</th><th></th></tr></thead><tbody>
-            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
+            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
             </tbody></table>
           </div>
         </div>
@@ -8605,7 +8644,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=61');
+        worker = new Worker('sales-worker.js?v=62');
       } catch(e) {
         return reject(e);
       }
@@ -9157,7 +9196,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
