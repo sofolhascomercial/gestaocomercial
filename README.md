@@ -491,3 +491,10 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Base de Vendas com datas/rede já importadas agora é recusada e enviada para decisão do operador.
 - Operador pode manter importação atual, substituir pela nova ou, em Base de Vendas, importar apenas datas novas.
 - O sistema não soma duplicidades automaticamente.
+
+## v55 - Aviso de duplicidade e ações em lote
+
+- Quando XML/PDF/ZIP ou Base de Vendas forem recusados por duplicidade, a tela de importação mostra aviso claro de que os dados duplicados não foram importados nem somados.
+- A aba Duplicidades ganhou seleção múltipla e ações em lote: manter atual, substituir pela nova, importar só datas novas e limpar selecionados.
+- O Histórico de Erros/Divergências ganhou seleção múltipla, cópia de detalhes, limpeza de selecionados e limpeza de erros iguais.
+- As ações em lote registram auditoria básica com usuário, data/hora e quantidade processada.

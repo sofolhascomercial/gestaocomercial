@@ -5186,12 +5186,19 @@
   }
 
   function renderImportIssues(issues){
-    return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Arquivo</th><th>Tipo</th><th>Divergência</th><th>Detalhe</th><th>Ação</th></tr></thead><tbody>
+    return `<div class="bulk-actions-bar">
+        <label class="inline-check"><input type="checkbox" onchange="App.setAllImportIssueSelection(this.checked)"> Selecionar todos</label>
+        <button class="btn btn-sm btn-soft" type="button" onclick="App.copySelectedImportIssueDetails()">Copiar detalhes selecionados</button>
+        <button class="btn btn-sm btn-soft" type="button" onclick="App.clearSelectedSimilarImportIssues()">Limpar erros iguais selecionados</button>
+        <button class="btn btn-sm btn-danger" type="button" onclick="App.clearSelectedImportIssues()">Limpar selecionados</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th class="select-col">Sel.</th><th>Data</th><th>Arquivo</th><th>Tipo</th><th>Divergência</th><th>Detalhe</th><th>Ação</th></tr></thead><tbody>
       ${issues.map(i=>{
         const key = importIssueKey(i);
         const encodedKey = encodeIssueKeyForAttr(key);
         const storeHint = importIssueStoreHint(i);
         return `<tr class="clickable-row import-issue-row" data-import-issue-row="1" data-issue-key="${escapeHtml(encodedKey)}" title="Clique para ver opções do erro">
+          <td class="select-col"><input type="checkbox" class="import-issue-check" value="${escapeHtml(encodedKey)}" aria-label="Selecionar erro"></td>
           <td>${formatDateTime(i.createdAt)}</td>
           <td>${escapeHtml(i.fileName||'')}</td>
           <td>${escapeHtml(i.kind||'')}</td>
@@ -5199,7 +5206,7 @@
           <td>${escapeHtml(i.detail||'')}${storeHint ? `<div class="small positive">CNPJ já vinculado: ${escapeHtml(storeHint)}</div>` : ''}</td>
           <td><button class="btn btn-sm btn-soft" type="button" data-import-issue-action="open" data-issue-key="${escapeHtml(encodedKey)}">Opções</button></td>
         </tr>`;
-      }).join('') || `<tr><td colspan="6" class="center muted">Sem divergências registradas.</td></tr>`}
+      }).join('') || `<tr><td colspan="7" class="center muted">Sem divergências registradas.</td></tr>`}
     </tbody></table></div>`;
   }
 
@@ -5253,6 +5260,63 @@
     });
     const removed = before - Store.data.importIssues.length;
     Store.save().then(()=>{ closeModal(); toast(`${removed} erro(s) semelhante(s) removido(s).`); render(); });
+  }
+
+  function selectedImportIssueKeys(){
+    return $$('.import-issue-check:checked').map(cb => decodeIssueKeyFromAttr(cb.value || '')).filter(Boolean);
+  }
+
+  function setAllImportIssueSelection(checked){
+    $$('.import-issue-check').forEach(cb => { cb.checked = !!checked; });
+  }
+
+  async function clearSelectedImportIssues(){
+    const keys = selectedImportIssueKeys();
+    if (!keys.length) return toast('Selecione ao menos um erro.', 'warn');
+    if (!confirm(`Limpar ${keys.length} erro(s) selecionado(s)?\n\nIsso remove apenas o histórico de erros. Não exclui XML/PDF, notas, entregas ou dados comerciais.`)) return;
+    const keySet = new Set(keys.map(String));
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => !keySet.has(importIssueKey(i)));
+    const removed = before - (Store.data.importIssues || []).length;
+    await Store.save();
+    toast(`${removed} erro(s) selecionado(s) limpo(s).`);
+    render();
+  }
+
+  async function clearSelectedSimilarImportIssues(){
+    const keys = selectedImportIssueKeys();
+    if (!keys.length) return toast('Selecione ao menos um erro.', 'warn');
+    const selected = keys.map(findImportIssueByKey).filter(Boolean);
+    if (!selected.length) return toast('Erro selecionado não encontrado.', 'warn');
+    if (!confirm(`Limpar erros iguais aos ${selected.length} selecionado(s)?\n\nQuando houver CNPJ no erro, serão limpos os erros do mesmo CNPJ e mesma divergência.`)) return;
+    const patterns = selected.map(issue => ({message:issue.message || '', cnpj:onlyDigits(importIssueCnpj(issue)), fileName:issue.fileName || ''}));
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(issue => {
+      return !patterns.some(p => {
+        if ((issue.message || '') !== p.message) return false;
+        if (p.cnpj) return onlyDigits(importIssueCnpj(issue)) === p.cnpj;
+        return (issue.fileName || '') === p.fileName;
+      });
+    });
+    const removed = before - (Store.data.importIssues || []).length;
+    await Store.save();
+    toast(`${removed} erro(s) igual(is) limpo(s).`);
+    render();
+  }
+
+  function copySelectedImportIssueDetails(){
+    const keys = selectedImportIssueKeys();
+    if (!keys.length) return toast('Selecione ao menos um erro.', 'warn');
+    const selected = keys.map(findImportIssueByKey).filter(Boolean);
+    const text = selected.map(i => [
+      `Arquivo: ${i.fileName || '—'}`,
+      `Tipo: ${i.kind || i.type || '—'}`,
+      `Divergência: ${i.message || '—'}`,
+      `Detalhe: ${i.detail || '—'}`
+    ].join('\n')).join('\n\n---\n\n');
+    if (!text) return toast('Nenhum detalhe encontrado.', 'warn');
+    navigator.clipboard?.writeText(text);
+    toast(`${selected.length} detalhe(s) copiado(s).`);
   }
 
   function linkImportIssueCnpjToStore(key){
@@ -5948,14 +6012,23 @@
       }
 
       await Store.save();
-      $('#pdfImportLog').className = 'empty';
+      const importTitle = duplicidadesDetectadas
+        ? (notasImportadas || total ? 'Importação parcial: duplicidades recusadas' : 'Importação barrada por duplicidade')
+        : 'Importação concluída';
+      const duplicateNotice = duplicidadesDetectadas ? `
+        <div class="duplicate-import-alert">
+          <strong>${fmt.format(duplicidadesDetectadas)} duplicidade(s) encontrada(s).</strong>
+          <p>As notas/XML/PDF duplicados <strong>NÃO foram importados nem somados</strong>. Eles foram enviados para a aba <strong>Duplicidades</strong> para decisão do operador.</p>
+          <div class="footer-actions compact-actions"><button class="btn btn-primary" type="button" onclick="App.go('duplicidades')">Ver duplicidades</button></div>
+        </div>` : '';
+      $('#pdfImportLog').className = duplicidadesDetectadas ? 'empty duplicate-import-log' : 'empty';
       $('#pdfImportLog').innerHTML = `
-        <strong>Importação concluída:</strong><br>
+        <strong>${importTitle}:</strong><br>
         Etapas processadas: <strong>${fmt.format(processedSteps)}</strong> • Notas/NF-e lidas: <strong>${fmt.format(notasLidas)}</strong> • Notas/NF-e importadas: <strong>${fmt.format(notasImportadas)}</strong> • Com divergência: <strong>${fmt.format(notasComDivergencia)}</strong> • Duplicidades recusadas: <strong>${fmt.format(duplicidadesDetectadas)}</strong> • NF cancelada rejeitada: <strong>${fmt.format(nfsCanceladasRejeitadas)}</strong> • Itens importados: <strong>${fmt.format(total)}</strong>
+        ${duplicateNotice}
         <hr>${log.map(escapeHtml).join('<br>')}
-        ${duplicidadesDetectadas?`<hr><strong>Duplicidades:</strong><br>${fmt.format(duplicidadesDetectadas)} nota(s)/importação(ões) foram recusadas e enviadas para a aba Duplicidades.`:''}
         ${unmatched.length?`<hr><strong>Divergências:</strong><br>${unique(unmatched).slice(0,80).map(escapeHtml).join('<br>')}${unique(unmatched).length>80?'<br>... demais divergências ficam na tabela abaixo.':''}`:''}`;
-      toast(`${fmt.format(notasImportadas)} notas/NF-e e ${fmt.format(total)} itens importados.`);
+      toast(duplicidadesDetectadas ? `${fmt.format(duplicidadesDetectadas)} duplicidade(s) recusada(s). Decida na aba Duplicidades.` : `${fmt.format(notasImportadas)} notas/NF-e e ${fmt.format(total)} itens importados.`);
       render();
     } finally {
       if (processBtn) {
@@ -6279,13 +6352,20 @@
             <p class="muted">O sistema não soma duplicidades automaticamente. Escolha manter a importação atual, substituir pela nova ou importar apenas datas novas quando for Base de Vendas.</p>
           </div>
         </div>
+        <div class="bulk-actions-bar">
+          <label class="inline-check"><input type="checkbox" onchange="App.setAllImportDuplicateSelection(this.checked)"> Selecionar todos</label>
+          <button class="btn btn-sm btn-soft" type="button" onclick="App.resolveSelectedImportDuplicates('keep')">Manter atual selecionados</button>
+          <button class="btn btn-sm btn-primary" type="button" onclick="App.resolveSelectedImportDuplicates('replace')">Substituir pela nova selecionados</button>
+          <button class="btn btn-sm btn-soft" type="button" onclick="App.resolveSelectedImportDuplicates('new-dates')">Importar só datas novas</button>
+          <button class="btn btn-sm btn-danger" type="button" onclick="App.clearSelectedImportDuplicates()">Excluir/limpar selecionados</button>
+        </div>
         ${renderDuplicatesTable(rows)}
       </div>`;
   }
 
   function renderDuplicatesTable(rows){
     return `<div class="table-wrap"><table>
-      <thead><tr><th>Status</th><th>Tipo</th><th>Data/período</th><th>Rede / Loja</th><th>Nota/NF ou arquivo</th><th class="num">Atual</th><th class="num">Nova</th><th>Ações</th></tr></thead>
+      <thead><tr><th class="select-col">Sel.</th><th>Status</th><th>Tipo</th><th>Data/período</th><th>Rede / Loja</th><th>Nota/NF ou arquivo</th><th class="num">Atual</th><th class="num">Nova</th><th>Ações</th></tr></thead>
       <tbody>${rows.map(d => {
         const type = d.scope === 'SALES' ? 'Base de Vendas' : (d.type || 'XML/PDF');
         const dateLabel = d.scope === 'SALES' ? `${formatDate(d.dateFrom)} a ${formatDate(d.dateTo)}` : formatDate(d.date);
@@ -6294,6 +6374,7 @@
         const current = d.scope === 'SALES' ? `${fmt.format(d.current?.records || 0)} reg.<br><span class="muted small">${fmt.format(d.current?.qty || 0)} und</span>` : `${fmt.format(d.current?.records || 0)} itens<br><span class="muted small">${money.format(d.current?.value || 0)}</span>`;
         const incoming = d.scope === 'SALES' ? `${fmt.format(d.incoming?.records || 0)} reg.<br><span class="muted small">${fmt.format(d.incoming?.qty || 0)} und</span>` : `${fmt.format(d.incoming?.records || 0)} itens<br><span class="muted small">${money.format(d.incoming?.value || 0)}</span>`;
         return `<tr>
+          <td class="select-col"><input type="checkbox" class="import-duplicate-check" value="${escapeHtml(d.id)}" aria-label="Selecionar duplicidade"></td>
           <td><span class="badge ${duplicateStatusClass(d.status)}">${duplicateStatusText(d.status)}</span></td>
           <td>${type}</td>
           <td>${dateLabel}</td>
@@ -6303,7 +6384,7 @@
           <td class="num">${incoming}</td>
           <td>${renderDuplicateActions(d)}</td>
         </tr>`;
-      }).join('') || `<tr><td colspan="8" class="center muted">Nenhuma duplicidade registrada.</td></tr>`}</tbody>
+      }).join('') || `<tr><td colspan="9" class="center muted">Nenhuma duplicidade registrada.</td></tr>`}</tbody>
     </table></div>`;
   }
 
@@ -6385,16 +6466,26 @@
     return finalRows.length;
   }
 
-  async function resolveImportDuplicate(id, action){
-    const dup = (Store.data.importDuplicates || []).find(d => d.id === id);
-    if (!dup) return toast('Duplicidade não encontrada.', 'error');
-    if (dup.status !== 'PENDENTE') return toast('Essa duplicidade já foi decidida.', 'warn');
-    const label = action === 'replace' ? 'substituir pela nova importação' : (action === 'new-dates' ? 'importar apenas datas novas' : 'manter a importação atual');
-    if (!confirm(`Confirmar decisão: ${label}?`)) return;
+  function selectedImportDuplicateIds(){
+    return $$('.import-duplicate-check:checked').map(cb => cb.value).filter(Boolean);
+  }
+
+  function setAllImportDuplicateSelection(checked){
+    $$('.import-duplicate-check').forEach(cb => { cb.checked = !!checked; });
+  }
+
+  function importDuplicateActionLabel(action){
+    if (action === 'replace') return 'substituir pela nova importação';
+    if (action === 'new-dates') return 'importar apenas datas novas';
+    return 'manter a importação atual';
+  }
+
+  function applyImportDuplicateDecision(dup, action){
     let resultMessage = '';
     if (dup.scope === 'DELIVERY' && action === 'replace') {
       const removed = removeCurrentDeliveryDuplicateRows(dup);
       const rows = sanitizeRowsForDuplicate(dup.pendingRows || []).map(r => ({...r, id:uid('del'), importedAt:new Date().toISOString()}));
+      Store.data.deliveries ||= [];
       Store.data.deliveries.push(...rows);
       dup.status = 'SUBSTITUIDA_PELA_NOVA';
       resultMessage = `${fmt.format(removed)} item(ns) antigo(s) removido(s) e ${fmt.format(rows.length)} novo(s) importado(s).`;
@@ -6420,9 +6511,62 @@
     dup.resolvedBy = state.session?.usuario || 'sistema';
     dup.resolutionAction = action;
     dup.resolutionNote = resultMessage;
+    return resultMessage;
+  }
+
+  async function resolveImportDuplicate(id, action){
+    const dup = (Store.data.importDuplicates || []).find(d => d.id === id);
+    if (!dup) return toast('Duplicidade não encontrada.', 'error');
+    if (dup.status !== 'PENDENTE') return toast('Essa duplicidade já foi decidida.', 'warn');
+    const label = importDuplicateActionLabel(action);
+    if (!confirm(`Confirmar decisão: ${label}?`)) return;
+    const resultMessage = applyImportDuplicateDecision(dup, action);
     await Store.save();
     closeModal();
     toast(`Duplicidade resolvida. ${resultMessage}`);
+    render();
+  }
+
+  async function resolveSelectedImportDuplicates(action){
+    const ids = selectedImportDuplicateIds();
+    if (!ids.length) return toast('Selecione ao menos uma duplicidade.', 'warn');
+    let selected = (Store.data.importDuplicates || []).filter(d => ids.includes(d.id));
+    const alreadyResolved = selected.filter(d => d.status !== 'PENDENTE').length;
+    selected = selected.filter(d => d.status === 'PENDENTE');
+    if (action === 'new-dates') selected = selected.filter(d => d.scope === 'SALES');
+    if (!selected.length) {
+      return toast(action === 'new-dates' ? 'A ação “Importar só datas novas” vale apenas para Base de Vendas pendente.' : 'Nenhuma duplicidade pendente selecionada.', 'warn');
+    }
+    const label = importDuplicateActionLabel(action);
+    const extra = alreadyResolved ? `\n\n${alreadyResolved} duplicidade(s) já resolvida(s) serão ignoradas.` : '';
+    if (!confirm(`Você selecionou ${selected.length} duplicidade(s).\nDeseja ${label}?${extra}`)) return;
+    const messages = [];
+    selected.forEach(dup => messages.push(applyImportDuplicateDecision(dup, action)));
+    Store.data.auditLog ||= [];
+    Store.data.auditLog.push({
+      id:uid('audit'),
+      type:'DUPLICIDADE_LOTE',
+      action,
+      total:selected.length,
+      user:state.session?.usuario || 'sistema',
+      createdAt:new Date().toISOString()
+    });
+    await Store.save();
+    toast(`${selected.length} duplicidade(s) processada(s) em lote.`);
+    render();
+  }
+
+  async function clearSelectedImportDuplicates(){
+    const ids = selectedImportDuplicateIds();
+    if (!ids.length) return toast('Selecione ao menos uma duplicidade para limpar.', 'warn');
+    if (!confirm(`Limpar ${ids.length} duplicidade(s) selecionada(s)?\n\nIsso remove apenas o registro da lista de duplicidades. Não importa dados novos e não apaga dados já importados.`)) return;
+    const before = (Store.data.importDuplicates || []).length;
+    Store.data.importDuplicates = (Store.data.importDuplicates || []).filter(d => !ids.includes(d.id));
+    const removed = before - (Store.data.importDuplicates || []).length;
+    Store.data.auditLog ||= [];
+    Store.data.auditLog.push({id:uid('audit'), type:'DUPLICIDADE_LIMPEZA_LOTE', total:removed, user:state.session?.usuario || 'sistema', createdAt:new Date().toISOString()});
+    await Store.save();
+    toast(`${removed} duplicidade(s) removida(s) da lista.`);
     render();
   }
 
@@ -8008,7 +8152,7 @@
         const pct = 97 + Math.min(2, Math.ceil((current / Math.max(total, 1)) * 2));
         updateSalesProgress(pct, 100, message || 'Salvando duplicidade para decisão do operador...');
       }});
-      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box"><div class="pdf-progress-head"><strong>Base recusada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text">Foram encontradas datas/períodos já importados. A base foi enviada para a aba Duplicidades de Importação.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
+      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box duplicate-import-log"><div class="pdf-progress-head"><strong>Planilha não importada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text"><strong>Esta base NÃO foi somada ao sistema.</strong><br>Foram encontradas datas/períodos já importados. A planilha foi enviada para a aba Duplicidades para decisão do operador.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
       toast('Base recusada por duplicidade. Decida na aba Duplicidades.', 'warn');
       render();
       return;
@@ -8220,7 +8364,7 @@
         const pct = 98 + Math.min(1, Math.ceil((current / Math.max(total, 1)) * 1));
         updateSalesProgress(pct, 100, message || 'Salvando duplicidade para decisão do operador...');
       }});
-      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box"><div class="pdf-progress-head"><strong>Base recusada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text">Foram encontradas datas/períodos já importados. A base foi enviada para a aba Duplicidades de Importação.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
+      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box duplicate-import-log"><div class="pdf-progress-head"><strong>Planilha não importada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text"><strong>Esta base NÃO foi somada ao sistema.</strong><br>Foram encontradas datas/períodos já importados. A planilha foi enviada para a aba Duplicidades para decisão do operador.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
       toast('Base recusada por duplicidade. Decida na aba Duplicidades.', 'warn');
       render();
       return;
@@ -8462,7 +8606,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
