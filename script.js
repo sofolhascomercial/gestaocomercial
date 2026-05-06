@@ -1418,7 +1418,7 @@
     dd_eptg: ['17457404003550'],
     dd_formosa: ['17457404003801'],
     dd_furnas: ['17457404003631'],
-    dd_gama: ['17457404003535'],
+    dd_gama: ['17457404000535', '17457404003535'],
     dd_goianesia: ['17457404002660'],
     dd_guara: ['17457404002074'],
     dd_gurupi: ['17457404002740'],
@@ -1482,6 +1482,7 @@
     '17457404001850': {id:'dd_ceilandia_centro', nome:'DD CEILÂNDIA CENTRO', rede:'DIA A DIA'},
     '17457404001264': {id:'dd_ceilandia_sul', nome:'DD P SUL', rede:'DIA A DIA'},
     '17457404001698': {id:'dd_cesar_lattes', nome:'DD CÉSAR LATTES', rede:'DIA A DIA'},
+    '17457404000535': {id:'dd_gama', nome:'DD GAMA', rede:'DIA A DIA'},
     '17457404003535': {id:'dd_gama', nome:'DD GAMA', rede:'DIA A DIA'},
     '17457404002660': {id:'dd_goianesia', nome:'DD GOIANÉSIA', rede:'DIA A DIA'},
     '17457404002074': {id:'dd_guara', nome:'DD GUARÁ', rede:'DIA A DIA'},
@@ -5131,12 +5132,41 @@
   }
 
   function importIssueStoreSelectHtml(){
-    const stores = enrichStoreCnpjs(mergeCadastroById(Store.data?.stores || [], window.DEFAULT_STORES || []));
-    const options = stores
+    // Monta a lista de lojas para vínculo do CNPJ usando TODAS as fontes possíveis.
+    // Isso evita o modal vazio quando o Firebase/cache ainda não carregou o cadastro padrão.
+    const byId = new Map();
+    const addStore = (store) => {
+      if (!store || !store.id) return;
+      const nome = store.nome || store.nomeSistema || store.name || store.id;
+      const rede = store.rede || store.network || 'REDE';
+      byId.set(store.id, {...store, nome, rede});
+    };
+
+    enrichStoreCnpjs(mergeCadastroById(Store.data?.stores || [], window.DEFAULT_STORES || [])).forEach(addStore);
+    (window.DEFAULT_STORES || []).forEach(addStore);
+
+    // Fallback direto a partir do mapa oficial de CNPJ, mesmo quando default-data.js não carregou.
+    Object.values(STORE_CNPJ_INFO || {}).forEach(info => addStore({
+      id: info.id,
+      nome: info.nome,
+      rede: info.rede,
+      cnpjs: Object.entries(STORE_CNPJ_INFO || {})
+        .filter(([, item]) => item?.id === info.id)
+        .map(([cnpj]) => cnpj)
+    }));
+
+    const stores = Array.from(byId.values())
       .filter(s => s?.id && s?.nome)
-      .sort((a,b) => `${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`, 'pt-BR'))
+      .sort((a,b) => `${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`, 'pt-BR'));
+
+    const options = stores
       .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`)
       .join('');
+
+    if (!options) {
+      return `<div class="alert warn">Nenhuma loja carregada para vínculo. Atualize a página com Ctrl+F5 e confirme se o arquivo data/default-data.js foi enviado ao GitHub.</div>`;
+    }
+
     return `<select id="issue-store-link-select"><option value="">Selecionar loja...</option>${options}</select>`;
   }
 

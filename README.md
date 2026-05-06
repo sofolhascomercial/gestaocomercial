@@ -1,5 +1,13 @@
 # Sistema Comercial Só Folhas — v45
 
+## v51
+
+- Corrige o mapeamento oficial do CNPJ da loja **DD GAMA** no XML.
+- Adiciona reconhecimento de `17.457.404/0005-35` / `17457404000535` como **DD GAMA**.
+- Mantém o vínculo anterior de `17.457.404/0035-35` como alias preventivo, sem impedir o reconhecimento do CNPJ correto informado pelo usuário.
+- Atualiza cache para `v=51`.
+
+
 Versão com login imediato, Firebase em segundo plano e correção reforçada de reconhecimento XML por CNPJ.
 
 ## Correção v45
@@ -462,3 +470,8 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 ### Complemento v50
 - Incluído mapa direto dos 40 produtos encontrados no ZIP XML Dia a Dia para evitar divergência de produto não reconhecido.
 - Exemplos corrigidos: ALFACE AMERICANA BDJ, QUIABO, PIMENTA DEDO DE MOÇA, PIMENTA DE CHEIRO, PIMENTÃO COLORIDO, JILÓ, COUVE PICADO UND e COUVE FLOR UND.
+
+## Versão v52
+- Corrigido modal "Vincular CNPJ à loja" no histórico de erros.
+- A lista de lojas agora carrega usando cadastro atual, cadastro padrão e mapa oficial de CNPJs, evitando seletor vazio quando Firebase/cache estiver antigo.
+- Mantido reconhecimento do CNPJ 17.457.404/0005-35 como DD GAMA.
