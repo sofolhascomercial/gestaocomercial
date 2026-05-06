@@ -498,3 +498,12 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - A aba Duplicidades ganhou seleção múltipla e ações em lote: manter atual, substituir pela nova, importar só datas novas e limpar selecionados.
 - O Histórico de Erros/Divergências ganhou seleção múltipla, cópia de detalhes, limpeza de selecionados e limpeza de erros iguais.
 - As ações em lote registram auditoria básica com usuário, data/hora e quantidade processada.
+
+## v56 — Correção de botões de exclusão e auditoria de ações
+
+- Corrigido o botão **Excluir arquivo** no histórico de XML/PDF para usar evento interno seguro, sem depender somente de `onclick` no HTML.
+- Corrigidos os botões dinâmicos de exclusão de loja/nota, exclusão de base de venda, pendências de base e alertas de importação.
+- As exclusões agora renderizam a tela mesmo quando o salvamento local/Firebase demora ou apresenta falha, exibindo aviso ao operador.
+- A exclusão de arquivo remove entregas vinculadas, erros do arquivo, cancelamentos relacionados e duplicidades associadas.
+- Adicionado tratamento de erro para botões de ação: se uma ação falhar, o sistema exibe aviso em vez de parecer que o botão não respondeu.
+- Atualizado cache para `v=56`.

@@ -4920,7 +4920,7 @@
 
   function renderStatusBadge(details, scope, key){
     if (!details || !details.length) return '<span class="badge green">Importado</span>';
-    return `<button class="badge amber alert-click" type="button" data-app-action="show-import-alert" data-scope="${escapeHtml(scope)}" data-key="${escapeHtml(encodeIssueKeyForAttr(key))}">${details.length} alerta(s)</button>`;
+    return `<button class="badge amber alert-click" onclick="App.showImportAlert(${jsArg(scope)},${jsArg(key)})">${details.length} alerta(s)</button>`;
   }
 
 
@@ -5059,7 +5059,7 @@
         const detailRows = expanded ? renderPdfImportDetailRows(r.key) : '';
         return `
           <tr class="pdf-summary-row">
-            <td><button class="btn btn-sm btn-soft" type="button" data-app-action="toggle-pdf-history" data-key="${escapeHtml(encodeIssueKeyForAttr(r.key))}">${expanded?'−':'+'}</button></td>
+            <td><button class="btn btn-sm btn-soft" onclick="App.togglePdfHistory('${escapeHtml(r.key)}')">${expanded?'−':'+'}</button></td>
             <td>${formatDateTime(r.importedAt)}</td>
             <td><strong>${r.redes.join(', ') || 'Rede não identificada'}</strong></td>
             <td>${escapeHtml(r.fileName)}</td>
@@ -5069,7 +5069,7 @@
             <td class="num">${fmt.format(r.qty)}</td>
             <td class="num">${money.format(r.value)}</td>
             <td>${renderStatusBadge(details,'batch',r.key)}</td>
-            <td><button class="btn btn-sm btn-danger" type="button" data-app-action="delete-delivery-batch" data-key="${escapeHtml(encodeIssueKeyForAttr(r.key))}">Excluir arquivo</button></td>
+            <td><button class="btn btn-sm btn-danger" onclick="App.deleteDeliveryBatch(${jsArg(r.key)})">Excluir arquivo</button></td>
           </tr>
           ${detailRows}`;
       }).join('') || `<tr><td colspan="11" class="center muted">Nenhum XML/PDF importado.</td></tr>`}
@@ -5097,7 +5097,7 @@
                   <td class="num">${fmt.format(r.qty)}</td>
                   <td class="num">${money.format(r.value)}</td>
                   <td>${renderStatusBadge(r.alertDetails,'note',r.key)}</td>
-                  <td><button class="btn btn-sm btn-danger" type="button" data-app-action="delete-delivery-import" data-key="${escapeHtml(encodeIssueKeyForAttr(r.key))}">Excluir loja</button></td>
+                  <td><button class="btn btn-sm btn-danger" onclick="App.deleteDeliveryImport(${jsArg(r.key)})">Excluir loja</button></td>
                 </tr>`).join('')}
               </tbody>
             </table>
@@ -5111,55 +5111,44 @@
     return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Rede</th><th>Loja</th><th>Nº nota/pedido</th><th class="num">Itens na nota</th><th class="num">Qtd. total</th><th class="num">Valor total</th><th>Status</th><th>Ação</th></tr></thead><tbody>
       ${rows.map(r=>{
         const details = alertDetailsForNote(r.key);
-        return `<tr><td>${formatDate(r.date)}</td><td>${r.rede}</td><td>${storeById(r.storeId)?.nome||''}</td><td>${escapeHtml(r.orderNumber)}</td><td class="num">${fmt.format(r.items)}</td><td class="num">${fmt.format(r.qty)}</td><td class="num">${money.format(r.value)}</td><td>${renderStatusBadge(details,'note',r.key)}</td><td><button class="btn btn-sm btn-danger" type="button" data-app-action="delete-delivery-import" data-key="${escapeHtml(encodeIssueKeyForAttr(r.key))}">Excluir</button></td></tr>`;
+        return `<tr><td>${formatDate(r.date)}</td><td>${r.rede}</td><td>${storeById(r.storeId)?.nome||''}</td><td>${escapeHtml(r.orderNumber)}</td><td class="num">${fmt.format(r.items)}</td><td class="num">${fmt.format(r.qty)}</td><td class="num">${money.format(r.value)}</td><td>${renderStatusBadge(details,'note',r.key)}</td><td><button class="btn btn-sm btn-danger" onclick="App.deleteDeliveryImport(${jsArg(r.key)})">Excluir</button></td></tr>`;
       }).join('') || `<tr><td colspan="9" class="center muted">Nenhum XML/PDF importado.</td></tr>`}
     </tbody></table></div>`;
   }
 
 
-  async function deleteDeliveryImport(key){
-    if (!key) return toast('Registro não identificado para exclusão.', 'error');
+  function deleteDeliveryImport(key){
     if (!confirm('Excluir esta loja/nota importada e todos os dados de entrega vinculados?')) return;
-    const groupKey = String(key);
     const before = Store.data.deliveries.length;
-    const removedRows = Store.data.deliveries.filter(d => (d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`) === groupKey);
-    if (!removedRows.length) return toast('Nenhum dado encontrado para esta loja/nota. A tela pode estar desatualizada; use Ctrl+F5.', 'warn');
-    const removedFileNames = unique(removedRows.map(d=>d.fileName || d.sourceFileName).filter(Boolean));
-    Store.data.deliveries = Store.data.deliveries.filter(d => (d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`) !== groupKey);
-    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importGroupKey !== groupKey);
-    Store.data.importDuplicates = (Store.data.importDuplicates || []).filter(dup => dup.currentKey !== groupKey && dup.newKey !== groupKey && dup.importGroupKey !== groupKey);
+    const removedRows = Store.data.deliveries.filter(d => (d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`) === key);
+    Store.data.deliveries = Store.data.deliveries.filter(d => (d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`) !== key);
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importGroupKey !== key);
     Store.data.deletedImports ||= [];
-    Store.data.deletedImports.push({id:uid('delimp'), type:'ARQUIVO_NOTA', key:groupKey, removed:before-Store.data.deliveries.length, fileNames:removedFileNames, user:state.session?.usuario || 'sistema', createdAt:new Date().toISOString()});
-    await saveAndRender('Loja/nota removida com sucesso.');
+    Store.data.deletedImports.push({id:uid('delimp'), type:'ARQUIVO_NOTA', key, removed:before-Store.data.deliveries.length, fileNames:unique(removedRows.map(d=>d.fileName)), user:state.session.usuario, createdAt:new Date().toISOString()});
+    Store.save().then(()=>{toast('Loja/nota removida com sucesso.'); render();});
   }
 
-  async function deleteDeliveryBatch(batchId){
-    if (!batchId) return toast('Arquivo/importação não identificado para exclusão.', 'error');
+  function deleteDeliveryBatch(batchId){
     if (!confirm('Atenção: ao excluir este arquivo, todos os dados vinculados a essa importação serão removidos. Deseja continuar?')) return;
-    const key = String(batchId);
-    const removedRows = Store.data.deliveries.filter(d => (d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`) === key);
-    if (!removedRows.length) return toast('Nenhum dado encontrado para este arquivo. A tela pode estar desatualizada; use Ctrl+F5.', 'warn');
+    const removedRows = Store.data.deliveries.filter(d => (d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`) === batchId);
     const removedIds = new Set(removedRows.map(d=>d.id));
-    const removedGroupKeys = new Set(removedRows.map(d => d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`));
-    const removedFileNames = unique(removedRows.map(d=>d.fileName || d.sourceFileName).filter(Boolean));
+    const removedFileNames = unique(removedRows.map(d=>d.fileName));
     const before = Store.data.deliveries.length;
-    Store.data.deliveries = Store.data.deliveries.filter(d => (d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`) !== key);
-    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importBatchId !== key && !removedGroupKeys.has(i.importGroupKey) && !removedFileNames.includes(i.fileName));
-    Store.data.cancelledNfes = (Store.data.cancelledNfes || []).filter(c => c.importBatchId !== key && !removedFileNames.includes(c.fileName));
-    Store.data.importDuplicates = (Store.data.importDuplicates || []).filter(dup => dup.importBatchId !== key && !removedFileNames.includes(dup.fileName) && !removedFileNames.includes(dup.newFileName));
+    Store.data.deliveries = Store.data.deliveries.filter(d => (d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`) !== batchId);
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importBatchId !== batchId && !removedFileNames.includes(i.fileName));
+    Store.data.cancelledNfes = (Store.data.cancelledNfes || []).filter(c => c.importBatchId !== batchId);
     Store.data.deletedImports ||= [];
     Store.data.deletedImports.push({
       id:uid('delpdf'),
       type:'ARQUIVO_ENTREGA',
-      key,
+      key:batchId,
       fileNames:removedFileNames,
       removed:before-Store.data.deliveries.length,
       affectedDeliveryIds:Array.from(removedIds),
-      affectedGroupKeys:Array.from(removedGroupKeys),
-      user:state.session?.usuario || 'sistema',
+      user:state.session.usuario,
       createdAt:new Date().toISOString()
     });
-    await saveAndRender('Arquivo removido com todos os dados vinculados.');
+    Store.save().then(()=>{toast('Arquivo removido com todos os dados vinculados.'); render();});
   }
 
   function importIssueKey(i){
@@ -7856,27 +7845,6 @@
       toast(state.mobileMode ? 'Modo mobile ativado para acesso pelo celular.' : 'Modo mobile desativado.');
     });
     document.addEventListener('click', e=>{
-      const actionButton = e.target.closest('[data-app-action]');
-      if (actionButton) {
-        e.preventDefault();
-        e.stopPropagation();
-        const action = actionButton.dataset.appAction || '';
-        const key = decodeIssueKeyFromAttr(actionButton.dataset.key || '');
-        try {
-          if (action === 'toggle-pdf-history') return togglePdfHistory(key);
-          if (action === 'delete-delivery-batch') return deleteDeliveryBatch(key);
-          if (action === 'delete-delivery-import') return deleteDeliveryImport(key);
-          if (action === 'delete-sales-import') return deleteSalesImport(key);
-          if (action === 'show-sales-pendencies') return showSalesImportPendencies(key);
-          if (action === 'show-import-alert') return showImportAlert(actionButton.dataset.scope || '', key);
-          if (action === 'go') return go(actionButton.dataset.page || key);
-        } catch(actionError) {
-          console.error('Falha ao executar ação do botão.', action, actionError);
-          toast('Falha ao executar esta ação. Recarregue a página com Ctrl+F5 e tente novamente.', 'error');
-        }
-        return;
-      }
-
       const issueButton = e.target.closest('[data-import-issue-action="open"]');
       if (issueButton) {
         e.preventDefault();
@@ -7922,18 +7890,6 @@
     state.pdfCalendarSelectedDate = date;
     state.pdfCalendarMonth = String(date || todayISO()).slice(0,7);
     render();
-  }
-
-  async function saveAndRender(successMessage, {errorMessage='A ação foi aplicada nesta tela, mas houve falha ao salvar. Verifique o Firebase/IndexedDB.', rerender=true}={}){
-    try {
-      await Store.save();
-      if (successMessage) toast(successMessage, 'ok');
-    } catch(err) {
-      console.warn('Falha ao salvar após ação do operador.', err);
-      toast(errorMessage, 'warn');
-    } finally {
-      if (rerender) render();
-    }
   }
 
   function showImportAlert(scope, key){
@@ -8504,8 +8460,8 @@
         <td>${(i.sheets||[]).map(s => `<span class="badge blue">${escapeHtml(s.rede)} • ${fmt.format(s.records)}</span>`).join(' ') || '—'}</td>
         <td class="num">${fmt.format(i.records || 0)}</td>
         <td class="num">${fmt.format(i.qtyTotal || 0)}</td>
-        <td>${toNumber(i.unmatchedStores)+toNumber(i.unmatchedProducts) ? `<button class="badge amber" style="border:none;cursor:pointer" type="button" data-app-action="show-sales-pendencies" data-key="${escapeHtml(encodeIssueKeyForAttr(i.id))}">${fmt.format(toNumber(i.unmatchedStores)+toNumber(i.unmatchedProducts))} pendências</button>` : '<span class="badge green">OK</span>'}</td>
-        <td class="num"><button class="btn btn-sm btn-danger" type="button" data-app-action="delete-sales-import" data-key="${escapeHtml(encodeIssueKeyForAttr(i.id))}">Excluir</button></td>
+        <td>${toNumber(i.unmatchedStores)+toNumber(i.unmatchedProducts) ? `<button class="badge amber" style="border:none;cursor:pointer" onclick="App.showSalesImportPendencies('${i.id}')">${fmt.format(toNumber(i.unmatchedStores)+toNumber(i.unmatchedProducts))} pendências</button>` : '<span class="badge green">OK</span>'}</td>
+        <td class="num"><button class="btn btn-sm btn-danger" onclick="App.deleteSalesImport('${i.id}')">Excluir</button></td>
       </tr>`).join('') || `<tr><td colspan="7" class="center muted">Nenhuma base importada.</td></tr>`}</tbody>
     </table></div>`;
   }
@@ -8638,17 +8594,15 @@
   }
 
   async function deleteSalesImport(id){
-    if (!id) return toast('Base não identificada para exclusão.', 'error');
-    if (!confirm('Excluir esta base de venda e todos os registros vinculados a ela?')) return;
-    const key = String(id);
-    const before = (Store.data.sales || []).length;
-    Store.data.sales = (Store.data.sales || []).filter(s => s.importId !== key && s.fileId !== key);
-    Store.data.salesImports = (Store.data.salesImports || []).filter(i => i.id !== key);
-    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importId !== key);
-    Store.data.importDuplicates = (Store.data.importDuplicates || []).filter(dup => dup.importId !== key && dup.newImportId !== key);
+    if (!id) return;
+    Store.data.sales = (Store.data.sales || []).filter(s => s.importId !== id && s.fileId !== id);
+    Store.data.salesImports = (Store.data.salesImports || []).filter(i => i.id !== id);
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.importId !== id);
     Store.data.deletedImports ||= [];
-    Store.data.deletedImports.push({id:uid('delsales'), type:'BASE_VENDA', key, removed:before-(Store.data.sales || []).length, user:state.session?.usuario || 'sistema', createdAt:new Date().toISOString()});
-    await saveAndRender('Base de venda removida.');
+    Store.data.deletedImports.push({id:uid('delsales'), type:'BASE_VENDA', key:id, user:state.session?.usuario || 'sistema', createdAt:new Date().toISOString()});
+    await Store.save();
+    toast('Base de venda removida.');
+    render();
   }
 
   window.App = {
