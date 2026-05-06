@@ -1,3 +1,11 @@
+# Sistema Comercial Só Folhas — v57
+
+## v57
+
+- Adiciona CNPJs XML faltantes da rede Costa: Jardim Goiás, Rio Verde e Senador Canedo.
+- Evita sobrescrita automática do Firestore com base padrão/local durante a abertura do sistema ou login antes da leitura da nuvem terminar.
+- Mantém HTML/CSS/JavaScript puro, sem alterar estrutura, IDs, classes ou layout geral.
+
 # Sistema Comercial Só Folhas — v45
 
 ## v51

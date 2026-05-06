@@ -1035,6 +1035,9 @@
       this.cloud = null;
       this.usingCloud = false;
       this._savingCloud = false;
+      this._initializing = true;
+      this._cloudReadComplete = false;
+      this._cloudReadOk = false;
       try {
         if (window.firebase && window.firebaseConfig && window.firebaseConfig.apiKey) {
           if (!firebase.apps?.length) firebase.initializeApp(window.firebaseConfig);
@@ -1059,9 +1062,20 @@
       }
       let cloudData = null;
       if (this.usingCloud) {
-        try { cloudData = await withTimeout(this.loadCloudPayload(), 6000, 'Leitura do Firestore demorou.'); } catch(e) { console.warn('Falha ao ler dados do Firestore. Usando base local.', e); }
+        try {
+          cloudData = await withTimeout(this.loadCloudPayload(), 6000, 'Leitura do Firestore demorou.');
+          this._cloudReadOk = true;
+        } catch(e) {
+          console.warn('Falha ao ler dados do Firestore. Usando base local.', e);
+          this._cloudReadOk = false;
+        } finally {
+          this._cloudReadComplete = true;
+        }
       }
+      const hasCloudPayload = !!cloudData?.payload;
+      const hasLocalPayload = !!localData;
       let data = chooseStartupData(localData, cloudData);
+      const usingSeedFallback = !data;
       if (!data) data = this.seed();
       data = migrate(data);
       let loadedSalesFromChunks = false;
@@ -1075,7 +1089,12 @@
         console.warn('Falha ao carregar base de vendas em lotes. Usando payload principal.', e);
       }
       this.data = data;
-      await this.save({skipCloud:loadedSalesFromChunks, skipSalesChunks:loadedSalesFromChunks});
+      // Não sobrescreve o Firestore automaticamente com default-data/local antigo na abertura.
+      // Regra operacional: se o Firebase tem payload, ele é a fonte; se estiver vazio ou falhar,
+      // o sistema libera o uso local, mas só grava na nuvem após uma ação real do usuário/importação.
+      const skipStartupCloudSave = loadedSalesFromChunks || usingSeedFallback || !hasCloudPayload || (this.usingCloud && !this._cloudReadOk && hasLocalPayload);
+      await this.save({skipCloud:skipStartupCloudSave, skipSalesChunks:loadedSalesFromChunks});
+      this._initializing = false;
       this.startCloudListener();
       return data;
     },
@@ -1468,7 +1487,10 @@
     costa_santa_maria: ['27289076001530'],
     costa_t_63: ['27289076000135'],
     costa_go_070: ['27289076000640'],
-    costa_avenida_goias: ['27289076000801']
+    costa_avenida_goias: ['27289076000801'],
+    costa_jardim_goias: ['27289076000305'],
+    costa_rio_verde: ['27289076000720'],
+    costa_senador_canedo: ['27289076000992']
   };
 
   const STORE_CNPJ_INFO = {
@@ -1538,7 +1560,10 @@
     '27289076001530': {id:'costa_santa_maria', nome:'COSTA SANTA MARIA', rede:'COSTA'},
     '27289076000135': {id:'costa_t_63', nome:'COSTA T-63', rede:'COSTA'},
     '27289076000640': {id:'costa_go_070', nome:'COSTA GO-070', rede:'COSTA'},
-    '27289076000801': {id:'costa_avenida_goias', nome:'COSTA AVENIDA GOIÁS', rede:'COSTA'}
+    '27289076000801': {id:'costa_avenida_goias', nome:'COSTA AVENIDA GOIÁS', rede:'COSTA'},
+    '27289076000305': {id:'costa_jardim_goias', nome:'COSTA JARDIM GOIÁS', rede:'COSTA'},
+    '27289076000720': {id:'costa_rio_verde', nome:'COSTA RIO VERDE', rede:'COSTA'},
+    '27289076000992': {id:'costa_senador_canedo', nome:'COSTA SENADOR CANEDO', rede:'COSTA'}
   };
 
   function officialStoreInfoByCnpj(cnpj){
@@ -7831,7 +7856,8 @@
         Store.data.users = syncUsersWithStores(Store.data.users || [], Store.data.stores || [], Store.data.deletedCommercialUsers || []);
         const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
         if (!exists) Store.data.users.push(found);
-        Store.save().catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
+        const skipCloudDuringStartup = !!(Store._initializing && Store.usingCloud && !Store._cloudReadComplete);
+        Store.save({skipCloud: skipCloudDuringStartup}).catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
       } catch(saveLoginUserError) {
         console.warn('Falha ao persistir usuário recuperado.', saveLoginUserError);
       }
@@ -8683,6 +8709,8 @@
       .catch(async e => {
         console.warn('Falha ao iniciar dados. Usando base inicial local para liberar login.', e);
         try {
+          Store._initializing = false;
+          Store._cloudReadComplete = false;
           Store.usingCloud = false;
           Store.cloud = null;
           Store.data = migrate(Store.seed());
