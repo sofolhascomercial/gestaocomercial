@@ -23,6 +23,7 @@
     {id:'analise-pedidos', icon:'▤', label:'Análise de Pedidos'},
     {id:'importar-pdf', icon:'▣', label:'Importar XML/PDF'},
     {id:'conferencia-importacao', icon:'☑', label:'Conferência de Importação'},
+    {id:'duplicidades', icon:'⧉', label:'Duplicidades'},
     {id:'ofertas', icon:'🏷', label:'Ofertas'},
     {id:'precos', icon:'💲', label:'Acompanhamento de Preços'},
     {id:'chamados', icon:'✉', label:'Chamados'},
@@ -38,7 +39,7 @@
   ];
   const NAV_GROUPS = [
     {title:'Painel', pages:['dashboard','fechamento-dia']},
-    {title:'Importações', pages:['importar-pdf','conferencia-importacao','bases','conciliacao']},
+    {title:'Importações', pages:['importar-pdf','conferencia-importacao','duplicidades','bases','conciliacao']},
     {title:'Comercial', pages:['analises','analise-pedidos','ofertas','precos']},
     {title:'Operação', pages:['inventario-saida','estoque-loja','rupturas','itens-obrigatorios','faltas','pendencias','mix']},
     {title:'Atendimento', pages:['chamados']},
@@ -50,7 +51,7 @@
     {title:'Atendimento', items:[['chamados','✉','Chamados']]},
     {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
-  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','ofertas','precos','chamados','bases','conciliacao','faltas','pendencias','rupturas','historico'];
+  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
   const DEFAULT_COMMERCIAL_USERS = [
     { usuario:'anderson.wagner', senha:'sofolhas2026', nome:'Anderson Wagner', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
     { usuario:'matheus.victor', senha:'sofolhas2026', nome:'Matheus Victor', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
@@ -923,7 +924,7 @@
 
   function operationalScore(data){
     if (!data || typeof data !== 'object') return 0;
-    return [data.sales, data.deliveries, data.orders, data.offers, data.tickets, data.inventoryOut, data.importIssues, data.cancelledNfes]
+    return [data.sales, data.deliveries, data.orders, data.offers, data.tickets, data.inventoryOut, data.importIssues, data.cancelledNfes, data.importDuplicates]
       .reduce((total, list) => total + (Array.isArray(list) ? list.length : 0), 0);
   }
 
@@ -1599,6 +1600,7 @@
     data.storeStock ||= [];
     data.importIssues ||= [];
     data.cancelledNfes ||= [];
+    data.importDuplicates ||= [];
     data.deletedImports ||= [];
     fixKnownProductConfusions(data);
     reconcileSalesReferences(data);
@@ -1625,6 +1627,7 @@
       ticketsPermissionBootstrapDone: false,
       priceCheckWeekdays: [1,3,5],
       pricePermissionBootstrapDone: false,
+      duplicatePermissionBootstrapDone: false,
       ...(data.appConfig || {})
     };
     data.appConfig.criticalRuptureProductIds = unique(data.appConfig.criticalRuptureProductIds || ['alface_crespa_und','cheiro_verde','couve_und','brocolis_americano']);
@@ -1652,6 +1655,12 @@
         if (u.role === 'commercial') u.permissions = sanitizePermissions(unique([...(u.permissions || []), 'precos']));
       });
       data.appConfig.pricePermissionBootstrapDone = true;
+    }
+    if (!data.appConfig.duplicatePermissionBootstrapDone) {
+      (data.users || []).forEach(u => {
+        if (u.role === 'commercial') u.permissions = sanitizePermissions(unique([...(u.permissions || []), 'duplicidades']));
+      });
+      data.appConfig.duplicatePermissionBootstrapDone = true;
     }
     if (!data.appConfig.criticalRuptureProductsByRede || typeof data.appConfig.criticalRuptureProductsByRede !== 'object' || Array.isArray(data.appConfig.criticalRuptureProductsByRede)) {
       data.appConfig.criticalRuptureProductsByRede = {};
@@ -2042,6 +2051,150 @@
   function validQty(d){ return Math.max(0, toNumber(d.qtyPdf) - toNumber(d.faltaQty) - toNumber(d.qualidadeQty)); }
   function validValue(d){ return validQty(d) * toNumber(d.unitCost); }
   function deliverySourceLabel(d){ return (d?.sourceType || 'PDF').toUpperCase() === 'XML' ? 'XML' : 'PDF'; }
+
+  function deliveryDuplicateKeyFromParts(sourceType, xmlKey, date, rede, storeId, orderNumber){
+    const src = String(sourceType || 'PDF').toUpperCase();
+    const key = normalizeXmlKey(xmlKey || '');
+    if (src === 'XML' && key) return `XML|${key}`;
+    return `${src}|${date || ''}|${normalize(rede || '')}|${storeId || ''}|${normalize(orderNumber || '')}`;
+  }
+
+  function deliveryDuplicateKeyFromRow(row){
+    return deliveryDuplicateKeyFromParts(row?.sourceType || 'PDF', row?.xmlKey || row?.importKey || '', row?.date || row?.deliveryDate || '', row?.rede || '', row?.storeId || '', row?.orderNumber || '');
+  }
+
+  function findDeliveryRowsByDuplicateKey(duplicateKey){
+    if (!duplicateKey) return [];
+    return (Store.data.deliveries || []).filter(row => deliveryDuplicateKeyFromRow(row) === duplicateKey);
+  }
+
+  function duplicateRowsSummary(rows, kind='delivery'){
+    const list = rows || [];
+    if (kind === 'sales') {
+      return {
+        records:list.length,
+        qty:list.reduce((a,r)=>a+toNumber(r.qty),0),
+        value:0,
+        dates:unique(list.map(r=>r.date).filter(Boolean)).sort(),
+        stores:unique(list.map(r=>r.storeId || r.storeName || r.storeRaw).filter(Boolean)).length,
+        products:unique(list.map(r=>r.productId || r.productName || r.productRaw).filter(Boolean)).length
+      };
+    }
+    return {
+      records:list.length,
+      qty:list.reduce((a,r)=>a+toNumber(r.qtyPdf),0),
+      value:list.reduce((a,r)=>a+toNumber(r.valuePdf),0),
+      dates:unique(list.map(r=>r.date || r.deliveryDate).filter(Boolean)).sort(),
+      stores:unique(list.map(r=>r.storeId).filter(Boolean)).length,
+      products:unique(list.map(r=>r.productId).filter(Boolean)).length
+    };
+  }
+
+  function sanitizeRowsForDuplicate(rows){
+    return (rows || []).map(row => ({...row}));
+  }
+
+  function upsertImportDuplicate(dup){
+    if (!dup) return null;
+    Store.data.importDuplicates ||= [];
+    const key = String(dup.duplicateKey || dup.id || '');
+    const same = Store.data.importDuplicates.find(d => d.status === 'PENDENTE' && String(d.duplicateKey || '') === key && String(d.fileName || '') === String(dup.fileName || '') && String(d.scope || '') === String(dup.scope || ''));
+    const payload = {
+      ...dup,
+      status: dup.status || 'PENDENTE',
+      createdAt: dup.createdAt || new Date().toISOString(),
+      createdBy: dup.createdBy || state.session?.usuario || 'sistema'
+    };
+    if (same) {
+      Object.assign(same, payload, {id:same.id, updatedAt:new Date().toISOString()});
+      return same;
+    }
+    payload.id ||= uid('dup');
+    Store.data.importDuplicates.push(payload);
+    return payload;
+  }
+
+  function buildDeliveryDuplicate({sourceType, fileName, batchId, importGroupKey, duplicateKey, store, date, orderNumber, xmlKey, newRows, existingRows}){
+    const incoming = duplicateRowsSummary(newRows, 'delivery');
+    const current = duplicateRowsSummary(existingRows, 'delivery');
+    return {
+      id:uid('dup'),
+      scope:'DELIVERY',
+      type:String(sourceType || 'PDF').toUpperCase(),
+      duplicateKey,
+      status:'PENDENTE',
+      date: date || incoming.dates?.[0] || current.dates?.[0] || todayISO(),
+      rede: store?.rede || newRows?.[0]?.rede || existingRows?.[0]?.rede || '',
+      storeId: store?.id || newRows?.[0]?.storeId || existingRows?.[0]?.storeId || '',
+      storeName: store?.nome || storeById(newRows?.[0]?.storeId)?.nome || storeById(existingRows?.[0]?.storeId)?.nome || '',
+      noteNumber: orderNumber || newRows?.[0]?.orderNumber || existingRows?.[0]?.orderNumber || '',
+      xmlKey: normalizeXmlKey(xmlKey || newRows?.[0]?.xmlKey || existingRows?.[0]?.xmlKey || ''),
+      fileName,
+      importBatchId:batchId,
+      importGroupKey,
+      current,
+      incoming,
+      currentFileNames:unique((existingRows || []).map(r=>r.fileName || r.sourceFileName).filter(Boolean)),
+      pendingRows:sanitizeRowsForDuplicate(newRows),
+      message:'Nota/NF já importada. A nova entrada foi recusada até decisão do operador.'
+    };
+  }
+
+  function registerParsedDuplicate(parsed, fileName, batchId, type){
+    if (!parsed?.duplicate) return null;
+    const dup = upsertImportDuplicate({...parsed.duplicate, fileName:fileName || parsed.duplicate.fileName, importBatchId:batchId || parsed.duplicate.importBatchId, type:type || parsed.duplicate.type});
+    return dup;
+  }
+
+  function salesConflictKey(row){
+    return `${row?.date || ''}|${row?.rede || ''}`;
+  }
+
+  function buildSalesDuplicate(importId, fileName, rows, importSummary={}, issues=[], options={}){
+    const existingRows = Store.data.sales || [];
+    const existingKeys = new Set(existingRows.map(salesConflictKey));
+    const incomingKeys = new Set((rows || []).map(salesConflictKey).filter(k => !k.startsWith('|')));
+    const conflictKeys = Array.from(incomingKeys).filter(k => existingKeys.has(k)).sort();
+    const sameFile = (Store.data.salesImports || []).filter(i => i.fileName === fileName).map(i=>i.id);
+    if (!conflictKeys.length && !sameFile.length) return null;
+    const conflictSet = new Set(conflictKeys);
+    const currentRows = existingRows.filter(r => conflictSet.has(salesConflictKey(r)) || sameFile.includes(r.importId || r.fileId));
+    const conflictDates = unique(conflictKeys.map(k => k.split('|')[0]).filter(Boolean)).sort();
+    const conflictRedes = unique(conflictKeys.map(k => k.split('|')[1]).filter(Boolean)).sort();
+    const range = salesImportDateRange(rows || []);
+    return {
+      id:uid('dup'),
+      scope:'SALES',
+      type:'BASE_VENDA',
+      duplicateKey:`SALES|${fileName}|${range.from}|${range.to}|${conflictKeys.join(';') || sameFile.join(';')}`,
+      status:'PENDENTE',
+      date: range.from || todayISO(),
+      dateFrom: range.from,
+      dateTo: range.to,
+      rede: conflictRedes.join(', ') || unique((rows || []).map(r=>r.rede).filter(Boolean)).join(', '),
+      fileName,
+      importBatchId:importId,
+      newImportId:importId,
+      current: duplicateRowsSummary(currentRows, 'sales'),
+      incoming: duplicateRowsSummary(rows, 'sales'),
+      conflictKeys,
+      conflictDates,
+      conflictRedes,
+      sameFileImportIds:sameFile,
+      pendingRows:sanitizeRowsForDuplicate(rows),
+      pendingIssues:sanitizeRowsForDuplicate(issues || []),
+      importSummary:{...(importSummary || {}), id:importId, fileName, importedAt: options.importedAt || new Date().toISOString(), dateFrom:range.from, dateTo:range.to, dates:range.dates},
+      message: sameFile.length ? 'Arquivo/base já importado ou período conflitante. A nova base foi recusada até decisão do operador.' : 'Período de venda já importado. A nova base foi recusada até decisão do operador.'
+    };
+  }
+
+  function duplicateStatusText(status){
+    return ({PENDENTE:'Pendente', MANTIDA_ATUAL:'Mantida atual', SUBSTITUIDA_PELA_NOVA:'Substituída pela nova', IMPORTADAS_DATAS_NOVAS:'Importadas datas novas', IGNORADA:'Ignorada'})[status] || status || 'Pendente';
+  }
+
+  function duplicateStatusClass(status){
+    return status === 'PENDENTE' ? 'amber' : (status === 'SUBSTITUIDA_PELA_NOVA' || status === 'IMPORTADAS_DATAS_NOVAS' ? 'green' : 'gray');
+  }
   function dateInRange(date, from, to){
     if (from && date < from) return false;
     if (to && date > to) return false;
@@ -2269,6 +2422,7 @@
     if (id === 'pendencias') return computePendencies().filter(p=>p.status!=='ENCERRADA').length;
     if (id === 'rupturas') return computeRuptures().length + computeCriticalRuptureAlerts({onlyPending:true}).length;
     if (id === 'chamados') return (Store.data.tickets || []).filter(t => t.status === 'ABERTO').length;
+    if (id === 'duplicidades') return (Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length;
     return 0;
   }
 
@@ -3658,6 +3812,7 @@
       case 'analise-pedidos': return renderOrderAnalysis();
       case 'importar-pdf': return renderImportPdf();
       case 'conferencia-importacao': return renderImportAudit();
+      case 'duplicidades': return renderImportDuplicates();
       case 'ofertas': return renderOffers();
       case 'precos': return renderPriceMonitoringAdmin();
       case 'chamados': return renderTickets();
@@ -3794,6 +3949,7 @@
       <div class="clear-task-grid">
         ${clearTaskCard('Fechamento do dia', closing.status === 'OK' ? 'OK' : closing.blockers.length, `Data ${formatDate(closingDate)}`, 'fechamento-dia', closing.status === 'OK' ? 'green' : 'amber')}
         ${clearTaskCard('Importações / divergências', fmt.format(relevantIssues.length), 'PDF, XML ou Base para conferir', 'conferencia-importacao', relevantIssues.length ? 'amber' : 'green')}
+        ${clearTaskCard('Duplicidades pendentes', fmt.format((Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length), 'aguardando decisão do operador', 'duplicidades', (Store.data.importDuplicates || []).some(d => d.status === 'PENDENTE') ? 'amber' : 'green')}
         ${clearTaskCard('Chamados abertos', fmt.format(openTickets), `${fmt.format(activeTickets)} ativos no total`, 'chamados', openTickets ? 'amber' : 'green')}
         ${clearTaskCard('Rupturas pendentes', fmt.format(criticalPending), 'itens obrigatórios sem justificativa', 'rupturas', criticalPending ? 'red' : 'green')}
         ${clearTaskCard('Preços pendentes', fmt.format(pricePending), 'lojas sem coleta obrigatória', 'precos', pricePending ? 'red' : 'green')}
@@ -5492,7 +5648,6 @@
       }
 
       const importKey = `XML|${chave || orderNumber}|${store.id}|${product.id}|${itemNumber || cProd || rawProduct}`;
-      if (Store.data.deliveries.some(d => d.importKey === importKey)) continue;
       const d = {
         id: uid('del'),
         importKey,
@@ -5524,7 +5679,6 @@
         qualidadeQty: 0,
         importedAt: new Date().toISOString()
       };
-      Store.data.deliveries.push(d);
       records.push(d);
     }
 
@@ -5537,6 +5691,12 @@
         importGroupKey
       });
     }
+    const duplicateKey = deliveryDuplicateKeyFromParts('XML', chave, date, store.rede, store.id, orderNumber);
+    const existingRows = findDeliveryRowsByDuplicateKey(duplicateKey);
+    if (existingRows.length) {
+      return {records:[], unmatched, noteFound, importGroupKey, duplicate:buildDeliveryDuplicate({sourceType:'XML', fileName:fileLabel, batchId, importGroupKey, duplicateKey, store, date, orderNumber, xmlKey:chave, newRows:records, existingRows})};
+    }
+    Store.data.deliveries.push(...records);
     return {records, unmatched, noteFound, importGroupKey};
   }
 
@@ -5584,7 +5744,7 @@
     const redeHint = $('#pdfRede').value;
     const SAVE_EVERY_PAGES = 75;
     const YIELD_EVERY_PAGES = 3;
-    let total = 0, notasLidas = 0, notasImportadas = 0, notasComDivergencia = 0, nfsCanceladasRejeitadas = 0;
+    let total = 0, notasLidas = 0, notasImportadas = 0, notasComDivergencia = 0, nfsCanceladasRejeitadas = 0, duplicidadesDetectadas = 0;
     let totalSteps = files.length, processedSteps = 0, totalPages = 0, processedPages = 0;
     const unmatched = [];
     const log = [];
@@ -5596,11 +5756,9 @@
     updatePdfProgress(0, 1, 'Preparando arquivos para importação...');
 
     try {
-      for (const file of files) {
-        Store.data.deliveries = (Store.data.deliveries || []).filter(d => d.fileName !== file.name && d.sourceFileName !== file.name && !String(d.fileName || '').startsWith(file.name + '/'));
-        Store.data.importIssues = (Store.data.importIssues || []).filter(i => i.fileName !== file.name && !String(i.fileName || '').startsWith(file.name + '/'));
-      }
-      await Store.save();
+      // Não remove importações anteriores automaticamente.
+      // Se o mesmo XML/PDF/ZIP for importado novamente, a duplicidade é registrada para decisão do operador.
+      Store.data.importDuplicates ||= [];
 
       for (const file of files) {
         const ext = fileExt(file.name);
@@ -5633,6 +5791,7 @@
               fileStats.divergencias += parsed.unmatched.length;
               unmatched.push(...parsed.unmatched.map(u=>u.detail));
               registerImportIssues(parsed, file.name, batchId, 'PDF');
+              if (registerParsedDuplicate(parsed, file.name, batchId, 'PDF')) { duplicidadesDetectadas++; fileStats.divergencias += 0; }
 
               processedPages++;
               processedSteps++;
@@ -5663,7 +5822,8 @@
             total += parsed.records.length;
             unmatched.push(...parsed.unmatched.map(u=>u.detail));
             registerImportIssues(parsed, file.name, batchId, 'XML');
-            log.push(`${file.name}: 1 XML, ${parsed.cancelled ? 'NF cancelada rejeitada' : (parsed.records.length ? '1 NF-e ativa importada' : '0 NF-e importada')}, ${parsed.records.length} itens${parsed.unmatched.length ? ` • ${parsed.unmatched.length} divergência(s)` : ''}.`);
+            if (registerParsedDuplicate(parsed, file.name, batchId, 'XML')) duplicidadesDetectadas++;
+            log.push(`${file.name}: 1 XML, ${parsed.duplicate ? 'duplicidade enviada para conferência' : (parsed.cancelled ? 'NF cancelada rejeitada' : (parsed.records.length ? '1 NF-e ativa importada' : '0 NF-e importada'))}, ${parsed.records.length} itens${parsed.unmatched.length ? ` • ${parsed.unmatched.length} divergência(s)` : ''}.`);
             processedSteps++;
             updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${fmt.format(total)} itens importados`);
             await Store.save();
@@ -5712,6 +5872,7 @@
               zipXml++;
               unmatched.push(...parsed.unmatched.map(u=>u.detail));
               registerImportIssues(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML');
+              if (registerParsedDuplicate(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML')) duplicidadesDetectadas++;
               processedSteps++;
               updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${entry.name} • ${fmt.format(total)} itens importados`);
               if (processedSteps % 50 === 0) await Store.save();
@@ -5733,6 +5894,7 @@
               zipXml++;
               unmatched.push(...parsed.unmatched.map(u=>u.detail));
               registerImportIssues(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML');
+              if (registerParsedDuplicate(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML')) duplicidadesDetectadas++;
               processedSteps++;
               updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${entry.name} • NF cancelada rejeitada`);
               if (processedSteps % 50 === 0) await Store.save();
@@ -5762,6 +5924,7 @@
                 zipDiv += parsed.unmatched.length;
                 unmatched.push(...parsed.unmatched.map(u=>u.detail));
                 registerImportIssues(parsed, displayName, batchId, 'PDF');
+                if (registerParsedDuplicate(parsed, displayName, batchId, 'PDF')) duplicidadesDetectadas++;
                 processedSteps++;
                 updatePdfProgress(processedSteps, totalSteps, `${displayName} • página ${pageNo}/${doc.numPages} • ${fmt.format(total)} itens importados`);
                 if (processedSteps % 50 === 0) await Store.save();
@@ -5788,8 +5951,9 @@
       $('#pdfImportLog').className = 'empty';
       $('#pdfImportLog').innerHTML = `
         <strong>Importação concluída:</strong><br>
-        Etapas processadas: <strong>${fmt.format(processedSteps)}</strong> • Notas/NF-e lidas: <strong>${fmt.format(notasLidas)}</strong> • Notas/NF-e importadas: <strong>${fmt.format(notasImportadas)}</strong> • Com divergência: <strong>${fmt.format(notasComDivergencia)}</strong> • NF cancelada rejeitada: <strong>${fmt.format(nfsCanceladasRejeitadas)}</strong> • Itens importados: <strong>${fmt.format(total)}</strong>
+        Etapas processadas: <strong>${fmt.format(processedSteps)}</strong> • Notas/NF-e lidas: <strong>${fmt.format(notasLidas)}</strong> • Notas/NF-e importadas: <strong>${fmt.format(notasImportadas)}</strong> • Com divergência: <strong>${fmt.format(notasComDivergencia)}</strong> • Duplicidades recusadas: <strong>${fmt.format(duplicidadesDetectadas)}</strong> • NF cancelada rejeitada: <strong>${fmt.format(nfsCanceladasRejeitadas)}</strong> • Itens importados: <strong>${fmt.format(total)}</strong>
         <hr>${log.map(escapeHtml).join('<br>')}
+        ${duplicidadesDetectadas?`<hr><strong>Duplicidades:</strong><br>${fmt.format(duplicidadesDetectadas)} nota(s)/importação(ões) foram recusadas e enviadas para a aba Duplicidades.`:''}
         ${unmatched.length?`<hr><strong>Divergências:</strong><br>${unique(unmatched).slice(0,80).map(escapeHtml).join('<br>')}${unique(unmatched).length>80?'<br>... demais divergências ficam na tabela abaixo.':''}`:''}`;
       toast(`${fmt.format(notasImportadas)} notas/NF-e e ${fmt.format(total)} itens importados.`);
       render();
@@ -6035,7 +6199,6 @@
         continue;
       }
       const id = `${pedido}|${store.id}|${product.id}|${dataSaida}|${qty}|${unitCost}`;
-      if (Store.data.deliveries.some(d=>d.importKey===id)) continue;
       const d = {
         id: uid('del'),
         importKey:id,
@@ -6057,7 +6220,6 @@
         qualidadeQty: 0,
         importedAt: new Date().toISOString()
       };
-      Store.data.deliveries.push(d);
       records.push(d);
     }
     const importedQty = records.reduce((sum,d)=>sum + toNumber(d.qtyPdf), 0);
@@ -6078,7 +6240,190 @@
         importGroupKey
       });
     }
+    const duplicateKey = deliveryDuplicateKeyFromParts('PDF', '', dataSaida || todayISO(), store.rede, store.id, pedido);
+    const existingRows = findDeliveryRowsByDuplicateKey(duplicateKey);
+    if (existingRows.length) {
+      return {records:[], unmatched, noteFound, importGroupKey, duplicate:buildDeliveryDuplicate({sourceType:'PDF', fileName, batchId, importGroupKey, duplicateKey, store, date:dataSaida || todayISO(), orderNumber:pedido, xmlKey:'', newRows:records, existingRows})};
+    }
+    Store.data.deliveries.push(...records);
     return {records, unmatched, noteFound, importGroupKey};
+  }
+
+
+  function duplicateRows(){
+    return (Store.data.importDuplicates || []).slice().sort((a,b)=>{
+      const pa = a.status === 'PENDENTE' ? 0 : 1;
+      const pb = b.status === 'PENDENTE' ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+  }
+
+  function renderImportDuplicates(){
+    setTitle('Duplicidades de Importação', 'Notas, XML/PDF e bases de venda repetidas ficam recusadas aqui até decisão do operador.');
+    const rows = duplicateRows();
+    const pending = rows.filter(d => d.status === 'PENDENTE');
+    const deliveryPending = pending.filter(d => d.scope === 'DELIVERY');
+    const salesPending = pending.filter(d => d.scope === 'SALES');
+    $('#viewRoot').innerHTML = `
+      <div class="grid kpis">
+        ${kpi('⧉','Pendentes',fmt.format(pending.length),'aguardando decisão', pending.length ? 'amber' : 'green')}
+        ${kpi('▣','XML/PDF',fmt.format(deliveryPending.length),'notas duplicadas')}
+        ${kpi('▤','Base de Vendas',fmt.format(salesPending.length),'períodos conflitantes')}
+        ${kpi('✓','Resolvidas',fmt.format(rows.length - pending.length),'decididas pelo operador')}
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>Duplicidades encontradas</h3>
+            <p class="muted">O sistema não soma duplicidades automaticamente. Escolha manter a importação atual, substituir pela nova ou importar apenas datas novas quando for Base de Vendas.</p>
+          </div>
+        </div>
+        ${renderDuplicatesTable(rows)}
+      </div>`;
+  }
+
+  function renderDuplicatesTable(rows){
+    return `<div class="table-wrap"><table>
+      <thead><tr><th>Status</th><th>Tipo</th><th>Data/período</th><th>Rede / Loja</th><th>Nota/NF ou arquivo</th><th class="num">Atual</th><th class="num">Nova</th><th>Ações</th></tr></thead>
+      <tbody>${rows.map(d => {
+        const type = d.scope === 'SALES' ? 'Base de Vendas' : (d.type || 'XML/PDF');
+        const dateLabel = d.scope === 'SALES' ? `${formatDate(d.dateFrom)} a ${formatDate(d.dateTo)}` : formatDate(d.date);
+        const place = d.scope === 'SALES' ? escapeHtml(d.rede || 'Todas') : `${escapeHtml(d.rede || '')}<br><span class="muted small">${escapeHtml(d.storeName || storeById(d.storeId)?.nome || 'Loja')}</span>`;
+        const ref = d.scope === 'SALES' ? escapeHtml(d.fileName || '') : `${escapeHtml(d.noteNumber || 'NF/nota')}<br><span class="muted small">${escapeHtml(d.fileName || '')}</span>`;
+        const current = d.scope === 'SALES' ? `${fmt.format(d.current?.records || 0)} reg.<br><span class="muted small">${fmt.format(d.current?.qty || 0)} und</span>` : `${fmt.format(d.current?.records || 0)} itens<br><span class="muted small">${money.format(d.current?.value || 0)}</span>`;
+        const incoming = d.scope === 'SALES' ? `${fmt.format(d.incoming?.records || 0)} reg.<br><span class="muted small">${fmt.format(d.incoming?.qty || 0)} und</span>` : `${fmt.format(d.incoming?.records || 0)} itens<br><span class="muted small">${money.format(d.incoming?.value || 0)}</span>`;
+        return `<tr>
+          <td><span class="badge ${duplicateStatusClass(d.status)}">${duplicateStatusText(d.status)}</span></td>
+          <td>${type}</td>
+          <td>${dateLabel}</td>
+          <td>${place}</td>
+          <td>${ref}</td>
+          <td class="num">${current}</td>
+          <td class="num">${incoming}</td>
+          <td>${renderDuplicateActions(d)}</td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="8" class="center muted">Nenhuma duplicidade registrada.</td></tr>`}</tbody>
+    </table></div>`;
+  }
+
+  function renderDuplicateActions(d){
+    const id = escapeHtml(d.id);
+    const detail = `<button class="btn btn-sm btn-soft" onclick="App.openImportDuplicate('${id}')">Ver comparação</button>`;
+    if (d.status !== 'PENDENTE') return detail;
+    if (d.scope === 'SALES') {
+      return `<div class="action-stack">${detail}<button class="btn btn-sm btn-soft" onclick="App.resolveImportDuplicate('${id}','keep')">Manter atual</button><button class="btn btn-sm btn-primary" onclick="App.resolveImportDuplicate('${id}','replace')">Substituir pela nova</button><button class="btn btn-sm btn-soft" onclick="App.resolveImportDuplicate('${id}','new-dates')">Importar só datas novas</button></div>`;
+    }
+    return `<div class="action-stack">${detail}<button class="btn btn-sm btn-soft" onclick="App.resolveImportDuplicate('${id}','keep')">Manter atual</button><button class="btn btn-sm btn-primary" onclick="App.resolveImportDuplicate('${id}','replace')">Substituir pela nova</button></div>`;
+  }
+
+  function openImportDuplicate(id){
+    const dup = (Store.data.importDuplicates || []).find(d => d.id === id);
+    if (!dup) return toast('Duplicidade não encontrada.', 'error');
+    const isSales = dup.scope === 'SALES';
+    const conflictDates = (dup.conflictDates || []).map(formatDate).join(', ') || '—';
+    const body = `
+      <div class="grid two">
+        <div class="panel"><h4>Importação atual</h4><p><strong>${isSales ? fmt.format(dup.current?.records || 0) + ' registros' : fmt.format(dup.current?.records || 0) + ' itens'}</strong></p><p class="muted small">Qtd: ${fmt.format(dup.current?.qty || 0)}${!isSales ? ` • Valor: ${money.format(dup.current?.value || 0)}` : ''}</p></div>
+        <div class="panel"><h4>Nova importação recusada</h4><p><strong>${isSales ? fmt.format(dup.incoming?.records || 0) + ' registros' : fmt.format(dup.incoming?.records || 0) + ' itens'}</strong></p><p class="muted small">Qtd: ${fmt.format(dup.incoming?.qty || 0)}${!isSales ? ` • Valor: ${money.format(dup.incoming?.value || 0)}` : ''}</p></div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <p><strong>Tipo:</strong> ${isSales ? 'Base de Vendas' : escapeHtml(dup.type || 'XML/PDF')}</p>
+        <p><strong>Arquivo novo:</strong> ${escapeHtml(dup.fileName || '')}</p>
+        <p><strong>Rede/Loja:</strong> ${escapeHtml(dup.rede || '')} ${dup.storeName ? ' • ' + escapeHtml(dup.storeName) : ''}</p>
+        <p><strong>Nota/NF ou período:</strong> ${isSales ? `${formatDate(dup.dateFrom)} a ${formatDate(dup.dateTo)}` : escapeHtml(dup.noteNumber || dup.xmlKey || '')}</p>
+        ${isSales ? `<p><strong>Datas conflitantes:</strong> ${conflictDates}</p>` : ''}
+        <p><strong>Status:</strong> ${duplicateStatusText(dup.status)}</p>
+        ${dup.resolvedAt ? `<p><strong>Decidido por:</strong> ${escapeHtml(dup.resolvedBy || '')} em ${formatDateTime(dup.resolvedAt)}</p>` : ''}
+        <p class="muted small">${escapeHtml(dup.message || '')}</p>
+      </div>
+      ${dup.status === 'PENDENTE' ? `<div class="footer-actions">${isSales ? `<button class="btn btn-soft" onclick="App.resolveImportDuplicate('${dup.id}','keep')">Manter atual</button><button class="btn btn-primary" onclick="App.resolveImportDuplicate('${dup.id}','replace')">Substituir pela nova</button><button class="btn btn-soft" onclick="App.resolveImportDuplicate('${dup.id}','new-dates')">Importar só datas novas</button>` : `<button class="btn btn-soft" onclick="App.resolveImportDuplicate('${dup.id}','keep')">Manter atual</button><button class="btn btn-primary" onclick="App.resolveImportDuplicate('${dup.id}','replace')">Substituir pela nova</button>`}</div>` : ''}`;
+    openModal('Comparação da duplicidade', body);
+  }
+
+  function removeCurrentDeliveryDuplicateRows(dup){
+    const key = dup.duplicateKey;
+    const before = (Store.data.deliveries || []).length;
+    Store.data.deliveries = (Store.data.deliveries || []).filter(row => deliveryDuplicateKeyFromRow(row) !== key);
+    return before - (Store.data.deliveries || []).length;
+  }
+
+  function salesRowsForDuplicate(dup, mode){
+    const rows = sanitizeRowsForDuplicate(dup.pendingRows || []);
+    if (mode === 'new-dates') {
+      const conflict = new Set(dup.conflictKeys || []);
+      return rows.filter(r => !conflict.has(salesConflictKey(r)));
+    }
+    return rows;
+  }
+
+  function appendSalesDuplicateImport(dup, mode){
+    const rows = salesRowsForDuplicate(dup, mode);
+    if (!rows.length) return 0;
+    const importId = dup.newImportId || uid('sales');
+    const importedAt = new Date().toISOString();
+    const finalRows = rows.map((r, idx) => ({...r, id:`${importId}_${idx+1}`, importId, fileName:dup.fileName, importedAt}));
+    appendSalesRows(finalRows);
+    const range = salesImportDateRange(finalRows);
+    Store.data.salesImports ||= [];
+    Store.data.salesImports.push({
+      ...(dup.importSummary || {}),
+      id:importId,
+      fileName:dup.fileName,
+      importedAt,
+      dateFrom:range.from,
+      dateTo:range.to,
+      dates:range.dates,
+      records:finalRows.length,
+      sourceRecords:finalRows.reduce((a,r)=>a+toNumber(r.sourceRecords || 1),0),
+      qtyTotal:finalRows.reduce((a,r)=>a+toNumber(r.qty),0),
+      resolvedFromDuplicateId:dup.id,
+      duplicateDecision:mode
+    });
+    Store.data.importIssues ||= [];
+    Store.data.importIssues.push(...(dup.pendingIssues || []).map(i => ({...i, id:uid('issue'), importId, source:'BASE_VENDA', createdAt:importedAt})));
+    return finalRows.length;
+  }
+
+  async function resolveImportDuplicate(id, action){
+    const dup = (Store.data.importDuplicates || []).find(d => d.id === id);
+    if (!dup) return toast('Duplicidade não encontrada.', 'error');
+    if (dup.status !== 'PENDENTE') return toast('Essa duplicidade já foi decidida.', 'warn');
+    const label = action === 'replace' ? 'substituir pela nova importação' : (action === 'new-dates' ? 'importar apenas datas novas' : 'manter a importação atual');
+    if (!confirm(`Confirmar decisão: ${label}?`)) return;
+    let resultMessage = '';
+    if (dup.scope === 'DELIVERY' && action === 'replace') {
+      const removed = removeCurrentDeliveryDuplicateRows(dup);
+      const rows = sanitizeRowsForDuplicate(dup.pendingRows || []).map(r => ({...r, id:uid('del'), importedAt:new Date().toISOString()}));
+      Store.data.deliveries.push(...rows);
+      dup.status = 'SUBSTITUIDA_PELA_NOVA';
+      resultMessage = `${fmt.format(removed)} item(ns) antigo(s) removido(s) e ${fmt.format(rows.length)} novo(s) importado(s).`;
+    } else if (dup.scope === 'SALES' && action === 'replace') {
+      const conflict = new Set(dup.conflictKeys || []);
+      const before = (Store.data.sales || []).length;
+      Store.data.sales = (Store.data.sales || []).filter(row => !conflict.has(salesConflictKey(row)) && !(dup.sameFileImportIds || []).includes(row.importId || row.fileId));
+      const removed = before - (Store.data.sales || []).length;
+      const added = appendSalesDuplicateImport(dup, 'replace');
+      recalcSalesImportSummaries(Store.data);
+      Store.data.salesImports = (Store.data.salesImports || []).filter(i => toNumber(i.records) > 0 || i.id === (dup.newImportId || ''));
+      dup.status = 'SUBSTITUIDA_PELA_NOVA';
+      resultMessage = `${fmt.format(removed)} registro(s) antigo(s) removido(s) e ${fmt.format(added)} novo(s) importado(s).`;
+    } else if (dup.scope === 'SALES' && action === 'new-dates') {
+      const added = appendSalesDuplicateImport(dup, 'new-dates');
+      dup.status = 'IMPORTADAS_DATAS_NOVAS';
+      resultMessage = added ? `${fmt.format(added)} registro(s) de datas novas importado(s).` : 'Não havia datas novas para importar.';
+    } else {
+      dup.status = 'MANTIDA_ATUAL';
+      resultMessage = 'A importação atual foi mantida e a nova ficou recusada.';
+    }
+    dup.resolvedAt = new Date().toISOString();
+    dup.resolvedBy = state.session?.usuario || 'sistema';
+    dup.resolutionAction = action;
+    dup.resolutionNote = resultMessage;
+    await Store.save();
+    closeModal();
+    toast(`Duplicidade resolvida. ${resultMessage}`);
+    render();
   }
 
 
@@ -7568,7 +7913,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=33');
+        worker = new Worker('sales-worker.js?v=54');
       } catch(e) {
         return reject(e);
       }
@@ -7620,26 +7965,12 @@
     const lower = file.name.toLowerCase();
     if (!lower.endsWith('.xlsx') && !lower.endsWith('.xls')) return toast('Selecione uma planilha Excel (.xlsx ou .xls).', 'error');
 
-    const existing = (Store.data.salesImports || []).filter(i => i.fileName === file.name);
-    if (existing.length) {
-      const replace = confirm(`Já existe base importada com o nome "${file.name}". Deseja substituir a base anterior?`);
-      if (replace) {
-        const ids = new Set(existing.map(i => i.id));
-        Store.data.sales = (Store.data.sales || []).filter(r => !ids.has(r.importId));
-        Store.data.salesImports = (Store.data.salesImports || []).filter(i => !ids.has(i.id));
-        Store.data.importIssues = (Store.data.importIssues || []).filter(i => !ids.has(i.importId));
-      }
-    }
-
     const period = salesPeriodReplaceOptions();
     let periodRemoval = {removed:0, affectedImports:0};
     if (period.enabled) {
-      if (!period.from || !period.to) return toast('Informe data inicial e final para substituir o período.', 'error');
+      if (!period.from || !period.to) return toast('Informe data inicial e final para enviar o período à conferência de duplicidade.', 'error');
       if (period.from > period.to) return toast('A data inicial não pode ser maior que a final.', 'error');
-      const redeTxt = period.rede ? ` da rede ${period.rede}` : '';
-      const ok = confirm(`Substituir vendas existentes${redeTxt} entre ${formatDate(period.from)} e ${formatDate(period.to)} antes de importar esta base?`);
-      if (!ok) return;
-      periodRemoval = removeSalesRowsByPeriod(period);
+      toast('A substituição agora é decidida na aba Duplicidades. A base será recusada se houver período já importado.', 'warn');
     }
 
     const importId = uid('sales');
@@ -7667,8 +7998,21 @@
       return toast('Nenhuma venda válida foi importada.', 'error');
     }
 
-    updateSalesProgress(96, 100, 'Salvando base consolidada...');
+    updateSalesProgress(96, 100, 'Verificando duplicidade de datas na base...');
     await yieldToBrowser();
+
+    const salesDuplicate = buildSalesDuplicate(importId, file.name, rows, {...(result.importSummary || {}), optimized:true, worker:true, consolidated:true, replacePeriod: period.enabled ? period : null}, issues, {importedAt});
+    if (salesDuplicate) {
+      upsertImportDuplicate(salesDuplicate);
+      await Store.save({onProgress:(current,total,message)=>{
+        const pct = 97 + Math.min(2, Math.ceil((current / Math.max(total, 1)) * 2));
+        updateSalesProgress(pct, 100, message || 'Salvando duplicidade para decisão do operador...');
+      }});
+      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box"><div class="pdf-progress-head"><strong>Base recusada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text">Foram encontradas datas/períodos já importados. A base foi enviada para a aba Duplicidades de Importação.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
+      toast('Base recusada por duplicidade. Decida na aba Duplicidades.', 'warn');
+      render();
+      return;
+    }
 
     appendSalesRows(rows);
     Store.data.salesImports ||= [];
@@ -7862,12 +8206,26 @@
       return toast('Nenhuma venda válida foi importada.', 'error');
     }
 
-    updateSalesProgress(98, 100, 'Salvando base no navegador...');
+    updateSalesProgress(98, 100, 'Verificando duplicidade de datas na base...');
     await yieldToBrowser();
 
     const range = salesImportDateRange(rows);
     const matchedProducts = rows.filter(r => r.productId).length;
     const matchedStores = rows.filter(r => r.storeId).length;
+    const legacySummary = {dateFrom:range.from, dateTo:range.to, dates:range.dates, records:rows.length, sourceRecords:rows.reduce((a,r)=>a+toNumber(r.sourceRecords),0), qtyTotal:rows.reduce((a,r)=>a+toNumber(r.qty),0), matchedProducts, unmatchedProducts:rows.length - matchedProducts, matchedStores, unmatchedStores:rows.length - matchedStores, sheets:sheetSummaries, optimized:false};
+    const salesDuplicate = buildSalesDuplicate(importId, file.name, rows, legacySummary, issues, {importedAt});
+    if (salesDuplicate) {
+      upsertImportDuplicate(salesDuplicate);
+      await Store.save({onProgress:(current,total,message)=>{
+        const pct = 98 + Math.min(1, Math.ceil((current / Math.max(total, 1)) * 1));
+        updateSalesProgress(pct, 100, message || 'Salvando duplicidade para decisão do operador...');
+      }});
+      $('#salesImportLog') && ($('#salesImportLog').innerHTML = `<div class="pdf-progress-box"><div class="pdf-progress-head"><strong>Base recusada por duplicidade</strong><span>100%</span></div><div class="pdf-progress-bar"><span style="width:100%"></span></div><div class="pdf-progress-text">Foram encontradas datas/períodos já importados. A base foi enviada para a aba Duplicidades de Importação.</div><div class="footer-actions"><button class="btn btn-primary" onclick="App.go('duplicidades')">Abrir Duplicidades</button></div></div>`);
+      toast('Base recusada por duplicidade. Decida na aba Duplicidades.', 'warn');
+      render();
+      return;
+    }
+
     Store.data.sales ||= [];
     Store.data.sales.push(...rows);
     Store.data.salesImports ||= [];
@@ -8104,7 +8462,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});

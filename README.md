@@ -482,3 +482,12 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - A importação de XML NF-e passa a gravar a data de saída/entrada (`dhSaiEnt` ou `dSaiEnt`) como a Data de entrega comercial.
 - A data de emissão (`dhEmi` ou `dEmi`) permanece registrada apenas para auditoria e fallback, caso o XML não traga data de saída.
 - Cada item importado por XML passa a armazenar também `deliveryDate`, `exitDate`, `emissionDate` e `xmlDateSource` para facilitar conferência futura.
+
+
+## v54 - Duplicidades de importação
+
+- Criada aba **Duplicidades** para XML/PDF e Base de Vendas.
+- XML/PDF duplicado por chave NF-e ou por data + rede + loja + nota agora é recusado e enviado para decisão do operador.
+- Base de Vendas com datas/rede já importadas agora é recusada e enviada para decisão do operador.
+- Operador pode manter importação atual, substituir pela nova ou, em Base de Vendas, importar apenas datas novas.
+- O sistema não soma duplicidades automaticamente.
