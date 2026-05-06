@@ -517,7 +517,7 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Atualizado cache para `v=56`.
 
 
-## Versão v60 - Otimização de travamentos e salvamento em fila
+## Versão v65 - Otimização de travamentos e salvamento em fila
 
 - Adicionada área de conciliação de nomes na aba Conciliação.
 - Permite vincular produto da planilha/XML/PDF a produto oficial do cadastro.
@@ -526,7 +526,7 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Após salvar, registros de Base de Venda já carregados são recalculados e erros iguais são limpos do histórico.
 - O Web Worker da Base de Vendas passou a receber as conciliações para resolver os nomes durante a importação.
 
-### Ajuste técnico v60 adicional
+### Ajuste técnico v65 adicional
 
 - A sincronização em nuvem agora usa uma fila com debounce para evitar múltiplos salvamentos Firestore em sequência.
 - Bases de venda grandes passam a ser salvas na nuvem em sublotes menores (`sales_chunks`), evitando montar um JSON gigante com toda a base de vendas a cada salvamento.
@@ -534,27 +534,33 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - A base de vendas em lotes é remontada automaticamente na leitura do Firestore.
 
 
-## Versão v61 - Correção da conciliação de lojas
+## Versão v65 - Correção da conciliação de lojas
 - Corrigida validação do botão Salvar conciliação da loja.
 - A função agora usa a mesma lista robusta do seletor, incluindo Firebase, default-data.js e mapa de CNPJs.
 - Quando a loja vem apenas do fallback, ela é incorporada ao cadastro em memória antes de salvar a conciliação.
 
 
-## Versão v62 - Modal de conciliação de loja
+## Versão v65 - Modal de conciliação de loja
 - Ao clicar em Conciliar nas lojas pendentes, abre modal com o nome recebido, rede e lista de lojas oficiais.
 - A lista usa a mesma fonte robusta do seletor: Firebase, default-data.js e mapa de CNPJs.
 - O sistema tenta sugerir automaticamente a loja mais provável e permite salvar direto no modal.
 
 
-## Versão v63 - Conciliação seletiva de lojas
+## Versão v65 - Conciliação seletiva de lojas
 - Botão Conciliar das lojas pendentes abre modal direto para o item selecionado.
 - Salvar conciliação de loja aplica somente nos registros com o mesmo nome recebido, evitando reprocessar a base inteira.
 - Salvar conciliação de produto também passou a aplicar somente o nome conciliado.
 - Remoção de conciliação não dispara mais reprocessamento pesado da base.
 
 
-## Versão v64 - Conciliação direta na tabela de lojas pendentes
+## Versão v65 - Conciliação direta na tabela de lojas pendentes
 - A tabela "Lojas pendentes para conciliar" agora mostra a coluna "Loja correta no cadastro" com um seletor em cada linha.
 - O ADM pode selecionar a loja correta e salvar a conciliação diretamente na própria linha, sem depender do formulário superior.
 - Mantida a conciliação seletiva: ao salvar, o sistema corrige apenas os registros com o mesmo nome recebido, reduzindo travamentos em bases grandes.
 - O botão "Abrir" foi mantido como opção alternativa para abrir o modal detalhado.
+
+## Versão v65 - Correção do botão Salvar na conciliação direta
+- Corrigido o botão Salvar da tabela "Lojas pendentes para conciliar" com listener direto após renderização.
+- A conciliação na própria linha agora lê o select da loja correta e executa a ação sem depender apenas de onclick inline.
+- Aplicação da conciliação de loja feita em lotes para evitar travamento em base grande.
+- Mantido HTML/CSS/JavaScript puro e estrutura geral preservada.

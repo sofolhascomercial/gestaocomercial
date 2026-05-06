@@ -6948,6 +6948,35 @@
     return {rows, records};
   }
 
+  async function applySingleStoreNameReconciliationAsync(rawName, store, redeHint=''){
+    const rawOnlyKey = storeAliasKeyFromRaw(rawName, '');
+    if (!rawOnlyKey || !store?.id) return {rows:0, records:0};
+    let rows = 0;
+    let records = 0;
+    const targetName = store.nome || store.nomeSistema || store.name || store.id;
+    const targetRede = store.rede || store.network || redeHint || '';
+    const sales = Store.data.sales || [];
+    const chunkSize = 2500;
+    for (let i = 0; i < sales.length; i += chunkSize) {
+      const limit = Math.min(i + chunkSize, sales.length);
+      for (let j = i; j < limit; j++) {
+        const r = sales[j];
+        const rowRaw = r.storeRaw || r.storeName || '';
+        if (storeAliasKeyFromRaw(rowRaw, '') !== rawOnlyKey) continue;
+        if (!sameReconciliationRede(r.rede || '', redeHint || targetRede || '')) continue;
+        if (r.storeId !== store.id || r.storeName !== targetName || (targetRede && r.rede !== targetRede)) {
+          r.storeId = store.id;
+          r.storeName = targetName;
+          if (targetRede) r.rede = targetRede;
+          rows++;
+          records += toNumber(r.sourceRecords || 1);
+        }
+      }
+      if (sales.length > chunkSize) await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return {rows, records};
+  }
+
   function applySingleProductNameReconciliation(rawName, product){
     const key = productAliasKeyFromRaw(rawName);
     if (!key || !product?.id) return {rows:0, records:0};
@@ -7004,12 +7033,12 @@
     render();
   }
 
-  async function saveStoreNameReconciliationByValues(rawNameValue, targetIdValue, redeHint=''){
+  async function saveStoreNameReconciliationByValues(rawNameValue, targetIdValue, redeHint='', options={}){
     const rawName = String(rawNameValue || '').trim();
     const targetId = String(targetIdValue || '').trim();
     const store = storeById(targetId) || allKnownStoresForSelection().find(s => s.id === targetId);
-    if (!rawName) return toast('Informe o nome da loja como aparece na planilha/XML/PDF.', 'warn');
-    if (!store) return toast('Selecione a loja correta do cadastro.', 'warn');
+    if (!rawName) { toast('Informe o nome da loja como aparece na planilha/XML/PDF.', 'warn'); return false; }
+    if (!store) { toast('Selecione a loja correta do cadastro.', 'warn'); return false; }
     const normalizedStore = {
       ...store,
       id: store.id,
@@ -7019,16 +7048,19 @@
     if (!storeById(normalizedStore.id)) {
       Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores || [], [normalizedStore]));
     }
-    const key = storeAliasKeyFromRaw(rawName, redeHint || normalizedStore.rede || '');
+    const effectiveRede = redeHint || normalizedStore.rede || '';
+    const key = storeAliasKeyFromRaw(rawName, effectiveRede);
     const recs = nameReconciliationStore();
-    recs.stores[key] = {rawName, rede:redeHint || normalizedStore.rede || '', targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
-    const affected = applySingleStoreNameReconciliation(rawName, normalizedStore, redeHint || normalizedStore.rede || '');
-    const removed = clearStoreIssuesByRaw(rawName, redeHint || normalizedStore.rede || '');
+    recs.stores[key] = {rawName, rede:effectiveRede, targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    toast(`Aplicando conciliação de loja: ${rawName} → ${normalizedStore.nome}...`);
+    const affected = await applySingleStoreNameReconciliationAsync(rawName, normalizedStore, effectiveRede);
+    const removed = clearStoreIssuesByRaw(rawName, effectiveRede);
     state.reconciliationCache = null;
     Store.queueSave({}, 900);
     toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
-    closeModal();
-    render();
+    if (options.closeModal !== false) closeModal();
+    if (options.render !== false) render();
+    return true;
   }
 
   async function saveStoreNameReconciliation(){
@@ -7040,12 +7072,18 @@
   }
 
 
-  async function saveStoreNameReconciliationInline(rawName, redeHint, inlineKey){
+  async function saveStoreNameReconciliationInline(rawName, redeHint, inlineKey, buttonEl=null){
     const fieldId = reconciliationInlineId(inlineKey || storeAliasKeyFromRaw(rawName, redeHint || ''));
     const select = document.getElementById(fieldId);
     const targetId = select?.value || '';
     if (!targetId) return toast('Selecione a loja correta nesta linha antes de salvar.', 'warn');
-    await saveStoreNameReconciliationByValues(rawName, targetId, redeHint || '');
+    const btn = buttonEl || null;
+    if (btn) { btn.disabled = true; btn.dataset.originalText ||= btn.textContent; btn.textContent = 'Salvando...'; }
+    try {
+      await saveStoreNameReconciliationByValues(rawName, targetId, redeHint || '', {closeModal:false, render:true});
+    } finally {
+      if (btn && document.body.contains(btn)) { btn.disabled = false; btn.textContent = btn.dataset.originalText || 'Salvar'; }
+    }
   }
 
   async function deleteNameReconciliation(type, key){
@@ -7161,7 +7199,7 @@
             ${storePendencies.map(g=>{
               const rowId = reconciliationInlineId(g.key);
               const guess = guessStoreForReconciliation(g.rawName, g.rede || '');
-              return `<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><select id="${escapeHtml(rowId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select><div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Selecione a loja correta para este nome.'}</div></td><td><button class="btn btn-sm btn-primary" type="button" onclick="App.saveStoreNameReconciliationInline(${jsArg(g.rawName)}, ${jsArg(g.rede || '')}, ${jsArg(g.key)})">Salvar</button><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Abrir</button></td></tr>`;
+              return `<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><select id="${escapeHtml(rowId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select><div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Selecione a loja correta para este nome.'}</div></td><td><button class="btn btn-sm btn-primary js-inline-store-save" type="button" data-raw="${escapeHtml(g.rawName)}" data-rede="${escapeHtml(g.rede || '')}" data-inline-key="${escapeHtml(g.key)}">Salvar</button><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Abrir</button></td></tr>`;
             }).join('') || `<tr><td colspan="6" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
             </tbody></table>
           </div>
@@ -7241,6 +7279,11 @@
       inp.addEventListener(inp.type === 'number' ? 'input' : 'change', handler);
     });
     $('#saveConc').addEventListener('click', ()=>Store.save().then(()=>toast('Conciliação salva.')));
+    $$('.js-inline-store-save').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await saveStoreNameReconciliationInline(btn.dataset.raw || '', btn.dataset.rede || '', btn.dataset.inlineKey || '', btn);
+      });
+    });
   }
   function renderMissingQuality(){
     setTitle('Faltas e Qualidade', 'Lançamento exclusivo do ADM/comercial. Abate entrega e calcula valor pelo custo do PDF.');
@@ -8707,7 +8750,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=64');
+        worker = new Worker('sales-worker.js?v=65');
       } catch(e) {
         return reject(e);
       }
