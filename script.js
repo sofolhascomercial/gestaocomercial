@@ -12,6 +12,8 @@
   const CLOUD_COLLECTION = 'sistemas';
   const CLOUD_DOC_ID = 'pedido_comercial';
   const CLOUD_CHUNK_COLLECTION = 'payload_chunks';
+  const CLOUD_SALES_CHUNK_COLLECTION = 'sales_chunks';
+  const CLOUD_SALES_CHUNK_SIZE = 500;
   const CLOUD_CHUNK_SIZE = 700000;
   const ADMIN_USER = { usuario: 'gerenciacomercial', senha: 'sofolhas2026', nome: 'Administrador Comercial', role: 'admin' };
   const ADMIN_PAGES = [
@@ -987,6 +989,23 @@
         const text = chunks.slice(0, toNumber(meta.chunkCount)).join('');
         if (text) payload = JSON.parse(text);
       }
+      if (payload && meta.salesStorage === 'chunked-arrays' && toNumber(meta.salesChunkCount) > 0) {
+        try {
+          const qs = await docRef.collection(CLOUD_SALES_CHUNK_COLLECTION).orderBy('idx').get();
+          const salesChunks = [];
+          qs.forEach(doc => {
+            const item = doc.data() || {};
+            if (Array.isArray(item.rows)) salesChunks[toNumber(item.idx)] = item.rows;
+          });
+          payload.sales = [];
+          salesChunks.slice(0, toNumber(meta.salesChunkCount)).forEach(rows => {
+            if (Array.isArray(rows)) payload.sales.push(...rows);
+          });
+        } catch(e) {
+          console.warn('Falha ao carregar base de vendas em lotes do Firestore.', e);
+          payload.sales = payload.sales || [];
+        }
+      }
       return payload ? {payload, updatedAt: meta.updatedAt || dataUpdatedAt(payload)} : null;
     },
     async saveCloudPayload(updatedAt){
@@ -994,17 +1013,44 @@
       this._savingCloud = true;
       try {
         const docRef = this.cloudDoc();
-        const payloadText = JSON.stringify(this.data || {});
+        const sourceData = this.data || {};
+        const sales = Array.isArray(sourceData.sales) ? sourceData.sales : [];
+        let payloadData = sourceData;
+        let salesStorage = '';
+        let salesChunkCount = 0;
+
+        // Base de vendas grande não entra mais dentro de um único JSON gigante da nuvem.
+        // Ela é gravada em lotes menores para reduzir congelamento do navegador.
+        if (sales.length > 25000) {
+          salesStorage = 'chunked-arrays';
+          salesChunkCount = Math.ceil(sales.length / CLOUD_SALES_CHUNK_SIZE);
+          payloadData = {
+            ...sourceData,
+            sales: [],
+            _salesCloudStorage: salesStorage,
+            _salesCloudRecords: sales.length,
+            _salesCloudUpdatedAt: updatedAt
+          };
+          for (let i=0; i<salesChunkCount; i++) {
+            const rows = sales.slice(i * CLOUD_SALES_CHUNK_SIZE, (i + 1) * CLOUD_SALES_CHUNK_SIZE);
+            await docRef.collection(CLOUD_SALES_CHUNK_COLLECTION).doc(String(i).padStart(4,'0')).set({idx:i, rows, updatedAt});
+            if (i % 4 === 0) await yieldToBrowser();
+          }
+        }
+
+        const payloadText = JSON.stringify(payloadData || {});
+        const metaBase = {updatedAt, salesStorage, salesChunkCount};
         if (payloadText.length < 850000) {
-          await docRef.set({updatedAt, storage:'document', chunkCount:0, payload:this.data});
+          await docRef.set({...metaBase, storage:'document', chunkCount:0, payload:payloadData});
           return;
         }
         const chunks = [];
         for (let i=0; i<payloadText.length; i+=CLOUD_CHUNK_SIZE) chunks.push(payloadText.slice(i, i+CLOUD_CHUNK_SIZE));
         for (let i=0; i<chunks.length; i++) {
           await docRef.collection(CLOUD_CHUNK_COLLECTION).doc(String(i).padStart(4,'0')).set({idx:i, chunk:chunks[i], updatedAt});
+          if (i % 3 === 0) await yieldToBrowser();
         }
-        await docRef.set({updatedAt, storage:'chunked', chunkCount:chunks.length, payload:null});
+        await docRef.set({...metaBase, storage:'chunked', chunkCount:chunks.length, payload:null});
       } finally {
         setTimeout(() => { this._savingCloud = false; }, 800);
       }
@@ -1035,6 +1081,11 @@
       this.cloud = null;
       this.usingCloud = false;
       this._savingCloud = false;
+      this._pendingCloudUpdatedAt = '';
+      this._cloudSaveTimer = null;
+      this._localSaveTimer = null;
+      this._queuedSaveOptions = null;
+      this._queuedSaveResolvers = [];
       this._initializing = true;
       this._cloudReadComplete = false;
       this._cloudReadOk = false;
@@ -1142,6 +1193,51 @@
         }
       };
     },
+    scheduleCloudSave(updatedAt, delay=1400){
+      if (!this.usingCloud || !this.cloud) return;
+      this._pendingCloudUpdatedAt = updatedAt || this._pendingCloudUpdatedAt || new Date().toISOString();
+      if (this._cloudSaveTimer) clearTimeout(this._cloudSaveTimer);
+      $('#syncPill') && ($('#syncPill').textContent = 'Firestore aguardando sincronização');
+      this._cloudSaveTimer = setTimeout(() => this.flushCloudSave(), delay);
+    },
+    async flushCloudSave(){
+      if (!this.usingCloud || !this.cloud) return;
+      if (this._savingCloud) {
+        this.scheduleCloudSave(this._pendingCloudUpdatedAt || new Date().toISOString(), 1600);
+        return;
+      }
+      const updatedAt = this._pendingCloudUpdatedAt || new Date().toISOString();
+      this._pendingCloudUpdatedAt = '';
+      this._cloudSaveTimer = null;
+      try {
+        $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizando em segundo plano');
+        await this.saveCloudPayload(updatedAt);
+        $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizado');
+      } catch(e) {
+        this.lastSaveWarning = 'Dados salvos apenas neste navegador. Firebase não salvou.';
+        $('#syncPill') && ($('#syncPill').textContent = 'Firebase não salvou');
+        console.warn('Falha ao sincronizar Firestore', e);
+      } finally {
+        if (this._pendingCloudUpdatedAt) this.scheduleCloudSave(this._pendingCloudUpdatedAt, 1600);
+      }
+    },
+    queueSave(options={}, delay=850){
+      this._queuedSaveOptions = {...(this._queuedSaveOptions || {}), ...(options || {})};
+      if (this._localSaveTimer) clearTimeout(this._localSaveTimer);
+      return new Promise(resolve => {
+        this._queuedSaveResolvers = this._queuedSaveResolvers || [];
+        this._queuedSaveResolvers.push(resolve);
+        this._localSaveTimer = setTimeout(async () => {
+          const opts = this._queuedSaveOptions || {};
+          const resolvers = this._queuedSaveResolvers || [];
+          this._queuedSaveOptions = null;
+          this._queuedSaveResolvers = [];
+          this._localSaveTimer = null;
+          try { await this.save(opts); }
+          finally { resolvers.forEach(fn => { try { fn(true); } catch(_) {} }); }
+        }, delay);
+      });
+    },
     async save({skipCloud=false, onProgress=null, skipSalesChunks=false}={}){
       const updatedAt = new Date().toISOString();
       this.lastSaveWarning = '';
@@ -1181,16 +1277,10 @@
       }
       try { await idbSetSafe(STORAGE_KEY, dataForLocalSave, 'Salvamento do cadastro principal'); } catch(e) { console.warn('Falha ao gravar IndexedDB.', e); }
       if (this.usingCloud && !skipCloud) {
-        if (shouldAvoidLocalStringify) {
-          $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizando em segundo plano');
-          setTimeout(() => {
-            this.saveCloudPayload(updatedAt)
-              .then(() => { $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizado'); })
-              .catch(e => console.warn('Falha ao sincronizar Firestore', e));
-          }, 300);
-        } else {
-          try { await withTimeout(this.saveCloudPayload(updatedAt), 6000, 'Sincronização do Firestore demorou.'); } catch(e) { console.warn('Falha ao sincronizar Firestore', e); }
-        }
+        // Evita travamento: o Firebase passa a sincronizar em fila/debounce.
+        // O navegador grava localmente primeiro e manda a nuvem só depois de uma pausa curta,
+        // sem disparar vários JSON.stringify grandes em sequência.
+        this.scheduleCloudSave(updatedAt, shouldAvoidLocalStringify ? 1800 : 1200);
       }
     },
     async reset(){
@@ -1729,6 +1819,7 @@
     pdfCalendarMonth: '',
     pdfCalendarSelectedDate: '',
     offersFilterMonth: '',
+    reconciliationCache: null,
     audit: {
       dateFrom: '',
       dateTo: '',
@@ -6725,15 +6816,32 @@
     return afterColon.replace(/\s*\(pedido.+$/i,'').replace(/\s*\|\s*CNPJ.+$/i,'').replace(/\.$/,'').trim();
   }
 
-  function pendingProductAliasGroups(){
-    const map = new Map();
-    const add = (raw, source, rede='', storeRaw='', qty=0, records=1, date='') => {
+
+  function reconciliationCacheSignature(){
+    const data = Store.data || {};
+    const prodAliasCount = Object.keys(data.nameReconciliations?.products || {}).length;
+    const storeAliasCount = Object.keys(data.nameReconciliations?.stores || {}).length;
+    return [
+      Array.isArray(data.sales) ? data.sales.length : 0,
+      Array.isArray(data.importIssues) ? data.importIssues.length : 0,
+      prodAliasCount,
+      storeAliasCount,
+      data._updatedAt || data.updatedAt || ''
+    ].join('|');
+  }
+
+  function buildReconciliationAliasCache(){
+    const signature = reconciliationCacheSignature();
+    if (state.reconciliationCache?.signature === signature) return state.reconciliationCache;
+    const productMap = new Map();
+    const storeMap = new Map();
+    const addProduct = (raw, source, rede='', storeRaw='', qty=0, records=1, date='') => {
       const key = productAliasKeyFromRaw(raw);
       if (!key) return;
       const manual = resolveManualProductAlias(raw, Store.data.products || []);
       if (manual) return;
-      if (!map.has(key)) map.set(key, {key, rawName:String(raw || '').trim(), source:new Set(), redes:new Set(), stores:new Set(), records:0, qty:0, dates:new Set()});
-      const g = map.get(key);
+      if (!productMap.has(key)) productMap.set(key, {key, rawName:String(raw || '').trim(), source:new Set(), redes:new Set(), stores:new Set(), records:0, qty:0, dates:new Set()});
+      const g = productMap.get(key);
       g.source.add(source || '');
       if (rede) g.redes.add(rede);
       if (storeRaw) g.stores.add(storeRaw);
@@ -6741,29 +6849,46 @@
       g.qty += toNumber(qty || 0);
       if (date) g.dates.add(date);
     };
-    (Store.data.sales || []).forEach(r => { if (!r.productId) add(r.productRaw || r.productName, 'Base de Venda', r.rede, r.storeRaw || r.storeName, r.qty, r.sourceRecords || 1, r.date); });
-    (Store.data.importIssues || []).forEach(i => { const raw = importIssueProductRaw(i); if (raw) add(raw, i.type || i.source || 'XML/PDF', '', '', 0, 1, ''); });
-    return Array.from(map.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR'));
-  }
-
-  function pendingStoreAliasGroups(){
-    const map = new Map();
-    const add = (raw, rede, source, productRaw='', qty=0, records=1, date='') => {
+    const addStore = (raw, rede, source, productRaw='', qty=0, records=1, date='') => {
       const key = storeAliasKeyFromRaw(raw, rede);
       if (!key) return;
       const manual = resolveManualStoreAlias(raw, rede, Store.data.stores || []);
       if (manual) return;
-      if (!map.has(key)) map.set(key, {key, rawName:String(raw || '').trim(), rede:rede || '', source:new Set(), products:new Set(), records:0, qty:0, dates:new Set()});
-      const g = map.get(key);
+      if (!storeMap.has(key)) storeMap.set(key, {key, rawName:String(raw || '').trim(), rede:rede || '', source:new Set(), products:new Set(), records:0, qty:0, dates:new Set()});
+      const g = storeMap.get(key);
       g.source.add(source || '');
       if (productRaw) g.products.add(productRaw);
       g.records += toNumber(records || 1);
       g.qty += toNumber(qty || 0);
       if (date) g.dates.add(date);
     };
-    (Store.data.sales || []).forEach(r => { if (!r.storeId) add(r.storeRaw || r.storeName, r.rede, 'Base de Venda', r.productRaw || r.productName, r.qty, r.sourceRecords || 1, r.date); });
-    (Store.data.importIssues || []).forEach(i => { const raw = importIssueStoreRaw(i); if (raw && !importIssueCnpj(i)) add(raw, '', i.type || i.source || 'XML/PDF', '', 0, 1, ''); });
-    return Array.from(map.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR'));
+    const sales = Store.data.sales || [];
+    const issues = Store.data.importIssues || [];
+    sales.forEach(r => {
+      if (!r.productId) addProduct(r.productRaw || r.productName, 'Base de Venda', r.rede, r.storeRaw || r.storeName, r.qty, r.sourceRecords || 1, r.date);
+      if (!r.storeId) addStore(r.storeRaw || r.storeName, r.rede, 'Base de Venda', r.productRaw || r.productName, r.qty, r.sourceRecords || 1, r.date);
+    });
+    issues.forEach(i => {
+      const productRaw = importIssueProductRaw(i);
+      if (productRaw) addProduct(productRaw, i.type || i.source || 'XML/PDF', '', '', 0, 1, '');
+      const storeRaw = importIssueStoreRaw(i);
+      if (storeRaw && !importIssueCnpj(i)) addStore(storeRaw, '', i.type || i.source || 'XML/PDF', '', 0, 1, '');
+    });
+    const cache = {
+      signature,
+      products: Array.from(productMap.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR')),
+      stores: Array.from(storeMap.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR'))
+    };
+    state.reconciliationCache = cache;
+    return cache;
+  }
+
+  function pendingProductAliasGroups(){
+    return buildReconciliationAliasCache().products;
+  }
+
+  function pendingStoreAliasGroups(){
+    return buildReconciliationAliasCache().stores;
   }
 
   function reconciliationRows(type){
@@ -6825,16 +6950,25 @@
   async function saveStoreNameReconciliation(){
     const rawName = String($('#aliasStoreRaw')?.value || '').trim();
     const targetId = $('#aliasStoreTarget')?.value || '';
-    const store = storeById(targetId);
+    const store = storeById(targetId) || allKnownStoresForSelection().find(s => s.id === targetId);
     if (!rawName) return toast('Informe o nome da loja como aparece na planilha/XML/PDF.', 'warn');
     if (!store) return toast('Selecione a loja correta do cadastro.', 'warn');
-    const key = storeAliasKeyFromRaw(rawName, store.rede || '');
+    const normalizedStore = {
+      ...store,
+      id: store.id,
+      nome: store.nome || store.nomeSistema || store.name || store.id,
+      rede: store.rede || store.network || ''
+    };
+    if (!storeById(normalizedStore.id)) {
+      Store.data.stores = enrichStoreCnpjs(mergeCadastroById(Store.data.stores || [], [normalizedStore]));
+    }
+    const key = storeAliasKeyFromRaw(rawName, normalizedStore.rede || '');
     const recs = nameReconciliationStore();
-    recs.stores[key] = {rawName, rede:store.rede || '', targetId:store.id, targetName:store.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    recs.stores[key] = {rawName, rede:normalizedStore.rede || '', targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
     const affected = applyManualNameReconciliations();
-    const removed = clearStoreIssuesByRaw(rawName, store.rede || '');
+    const removed = clearStoreIssuesByRaw(rawName, normalizedStore.rede || '');
     await Store.save();
-    toast(`Loja conciliada: ${rawName} → ${store.nome}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
     render();
   }
 
@@ -7000,7 +7134,7 @@
           inp.checked ? arr.add(inp.value) : arr.delete(inp.value);
           Store.data.conciliation[type][field] = Array.from(arr).sort();
         }
-        Store.save();
+        Store.queueSave({}, 900);
       };
       inp.addEventListener(inp.type === 'number' ? 'input' : 'change', handler);
     });
@@ -8471,7 +8605,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=59');
+        worker = new Worker('sales-worker.js?v=61');
       } catch(e) {
         return reject(e);
       }

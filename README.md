@@ -517,7 +517,7 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Atualizado cache para `v=56`.
 
 
-## Versão v59 - Correção do seletor de lojas + melhoria visual da conciliação
+## Versão v60 - Otimização de travamentos e salvamento em fila
 
 - Adicionada área de conciliação de nomes na aba Conciliação.
 - Permite vincular produto da planilha/XML/PDF a produto oficial do cadastro.
@@ -525,3 +525,16 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - As conciliações ficam salvas em nameReconciliations no Firebase/IndexedDB.
 - Após salvar, registros de Base de Venda já carregados são recalculados e erros iguais são limpos do histórico.
 - O Web Worker da Base de Vendas passou a receber as conciliações para resolver os nomes durante a importação.
+
+### Ajuste técnico v60 adicional
+
+- A sincronização em nuvem agora usa uma fila com debounce para evitar múltiplos salvamentos Firestore em sequência.
+- Bases de venda grandes passam a ser salvas na nuvem em sublotes menores (`sales_chunks`), evitando montar um JSON gigante com toda a base de vendas a cada salvamento.
+- O payload principal continua no documento `sistemas/pedido_comercial` e, quando necessário, no subcaminho `payload_chunks`.
+- A base de vendas em lotes é remontada automaticamente na leitura do Firestore.
+
+
+## Versão v61 - Correção da conciliação de lojas
+- Corrigida validação do botão Salvar conciliação da loja.
+- A função agora usa a mesma lista robusta do seletor, incluindo Firebase, default-data.js e mapa de CNPJs.
+- Quando a loja vem apenas do fallback, ela é incorporada ao cadastro em memória antes de salvar a conciliação.
