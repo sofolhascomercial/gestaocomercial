@@ -475,3 +475,10 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Corrigido modal "Vincular CNPJ à loja" no histórico de erros.
 - A lista de lojas agora carrega usando cadastro atual, cadastro padrão e mapa oficial de CNPJs, evitando seletor vazio quando Firebase/cache estiver antigo.
 - Mantido reconhecimento do CNPJ 17.457.404/0005-35 como DD GAMA.
+
+
+## Versão v53 - Data de saída como data de entrega no XML
+
+- A importação de XML NF-e passa a gravar a data de saída/entrada (`dhSaiEnt` ou `dSaiEnt`) como a Data de entrega comercial.
+- A data de emissão (`dhEmi` ou `dEmi`) permanece registrada apenas para auditoria e fallback, caso o XML não traga data de saída.
+- Cada item importado por XML passa a armazenar também `deliveryDate`, `exitDate`, `emissionDate` e `xmlDateSource` para facilitar conferência futura.

@@ -5403,7 +5403,14 @@
     const numero = getXmlText(ide, 'nNF') || chave || uid('nfe');
     const serie = getXmlText(ide, 'serie');
     const orderNumber = serie ? `${numero}/${serie}` : numero;
-    const date = xmlDate(getXmlText(ide, 'dhSaiEnt') || getXmlText(ide, 'dSaiEnt') || getXmlText(ide, 'dhEmi') || getXmlText(ide, 'dEmi')) || todayISO();
+    const emissionRawDate = getXmlText(ide, 'dhEmi') || getXmlText(ide, 'dEmi');
+    const exitRawDate = getXmlText(ide, 'dhSaiEnt') || getXmlText(ide, 'dSaiEnt');
+    const emissionDate = xmlDate(emissionRawDate);
+    const exitDate = xmlDate(exitRawDate);
+    // Regra Só Folhas: em XML NF-e, a data comercial da entrega é SEMPRE a data de saída/entrada da NF-e.
+    // A data de emissão fica apenas para auditoria e só é usada como fallback quando o XML não traz data de saída.
+    const date = exitDate || emissionDate || todayISO();
+    const xmlDateSource = exitDate ? 'DATA_SAIDA_XML' : (emissionDate ? 'EMISSAO_XML_FALLBACK' : 'SEM_DATA_XML');
     const statusInfo = xmlStatusInfo(doc);
     if (statusInfo.code && statusInfo.code !== '100') {
       const inactiveInfo = {
@@ -5505,6 +5512,10 @@
         productRaw: rawProduct || cProd,
         unit,
         date,
+        deliveryDate: date,
+        exitDate,
+        emissionDate,
+        xmlDateSource,
         qtyPdf: qty,
         noteQtyTotal: xmlQtyTotal > 0 ? xmlQtyTotal : 0,
         unitCost,
