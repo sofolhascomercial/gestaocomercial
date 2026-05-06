@@ -515,3 +515,13 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - A exclusão de arquivo remove entregas vinculadas, erros do arquivo, cancelamentos relacionados e duplicidades associadas.
 - Adicionado tratamento de erro para botões de ação: se uma ação falhar, o sistema exibe aviso em vez de parecer que o botão não respondeu.
 - Atualizado cache para `v=56`.
+
+
+## Versão v58 - Conciliação de nomes
+
+- Adicionada área de conciliação de nomes na aba Conciliação.
+- Permite vincular produto da planilha/XML/PDF a produto oficial do cadastro.
+- Permite vincular loja da planilha/XML/PDF a loja oficial do cadastro.
+- As conciliações ficam salvas em nameReconciliations no Firebase/IndexedDB.
+- Após salvar, registros de Base de Venda já carregados são recalculados e erros iguais são limpos do histórico.
+- O Web Worker da Base de Vendas passou a receber as conciliações para resolver os nomes durante a importação.

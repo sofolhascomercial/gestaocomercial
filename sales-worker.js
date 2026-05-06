@@ -40,6 +40,26 @@ function parseDate(v){
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0,10);
 }
 function unique(arr){ return Array.from(new Set(arr.filter(Boolean))); }
+function productAliasKeyFromRaw(value){ return normalize(String(value || '').split('|')[0].trim()); }
+function storeAliasKeyFromRaw(value, rede=''){
+  const raw = normalize(value);
+  return raw ? `${normalize(rede || '')}|${raw}` : '';
+}
+function resolveManualProductAlias(rawName, products=[], nameReconciliations={}){
+  const key = productAliasKeyFromRaw(rawName);
+  if (!key) return null;
+  const rec = (nameReconciliations.products || {})[key];
+  const targetId = typeof rec === 'string' ? rec : rec?.targetId;
+  return targetId ? (products || []).find(p => p.id === targetId) || null : null;
+}
+function resolveManualStoreAlias(rawName, redeHint='', stores=[], nameReconciliations={}){
+  const keys = unique([storeAliasKeyFromRaw(rawName, redeHint), storeAliasKeyFromRaw(rawName, '')]);
+  let rec = null;
+  const map = nameReconciliations.stores || {};
+  for (const key of keys) { if (map[key]) { rec = map[key]; break; } }
+  const targetId = typeof rec === 'string' ? rec : rec?.targetId;
+  return targetId ? (stores || []).find(s => s.id === targetId) || null : null;
+}
 
 const SALES_STORE_OVERRIDES = [
   {rede:'DIA A DIA', id:'dd_horacio_costa', patterns:['GOIANIA BALNEARIO','BALNEARIO']},
@@ -129,10 +149,12 @@ function hasQualifierMismatch(rawOriginal, product){
   if (!raw.includes('FILETADO') && p.includes('FILETADO')) return true;
   return false;
 }
-function matchProduct(rawName, products){
+function matchProduct(rawName, products, nameReconciliations={}){
   const original = String(rawName || '').split('|')[0].trim();
   const rawOriginal = normalize(original);
   if (!rawOriginal) return null;
+  const manualProduct = resolveManualProductAlias(original, products, nameReconciliations);
+  if (manualProduct) return manualProduct;
   if (rawOriginal.includes('BERINGELA')) {
     const berinjela = products.find(p => p.id === 'berinjela_bdj');
     if (berinjela) return berinjela;
@@ -195,9 +217,11 @@ function scoreStoreCandidates(raw, candidates){
   }
   return {best, bestScore};
 }
-function matchStore(rawName, redeHint='', stores=[]){
+function matchStore(rawName, redeHint='', stores=[], nameReconciliations={}){
   const raw = normalize(rawName);
   if (!raw) return null;
+  const manualStore = resolveManualStoreAlias(rawName, redeHint, stores, nameReconciliations);
+  if (manualStore) return manualStore;
   const known = storeOverrideByKnownSalesName(rawName, redeHint, stores);
   if (known) return known;
   const direct = scoreStoreCandidates(raw, stores);
@@ -254,7 +278,7 @@ function salesImportDateRange(rows){
 function pushLimitedIssue(list, issue, limit=250){ if (list.length < limit) list.push(issue); }
 function progress(current, total, message){ postMessage({type:'progress', current, total, message}); }
 
-function processSalesExcel({buffer, fileName, importId, importedAt, stores, products}){
+function processSalesExcel({buffer, fileName, importId, importedAt, stores, products, nameReconciliations}){
   progress(0, 100, 'Abrindo planilha no processador em segundo plano...');
   const workbook = XLSX.read(buffer, {type:'array', cellDates:true, raw:true});
   const issues = [];
@@ -329,11 +353,11 @@ function processSalesExcel({buffer, fileName, importId, importedAt, stores, prod
       const filialText = String(filial).trim();
       const cleanProduct = cleanSalesProductName(productRaw);
       const storeKey = `${rede}|${normalize(filialText)}`;
-      const prodKey = normalize(cleanProduct);
+      const prodKey = normalize(String(productRaw || '').trim());
       let store = storeCache.get(storeKey);
-      if (store === undefined) { store = matchStore(filialText, rede, stores); storeCache.set(storeKey, store || null); }
+      if (store === undefined) { store = matchStore(filialText, rede, stores, nameReconciliations || {}); storeCache.set(storeKey, store || null); }
       let product = productCache.get(prodKey);
-      if (product === undefined) { product = matchProduct(cleanProduct, products); productCache.set(prodKey, product || null); }
+      if (product === undefined) { product = matchProduct(productRaw, products, nameReconciliations || {}); productCache.set(prodKey, product || null); }
       if (!store) unmatchedStores++;
       if (!product) unmatchedProducts++;
 

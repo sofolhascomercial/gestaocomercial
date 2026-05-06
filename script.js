@@ -1125,6 +1125,7 @@
         criticalRuptureJustifications: [],
         inventoryOut: [],
         deletedCommercialUsers: [],
+        nameReconciliations: { products: {}, stores: {} },
         conciliation: {
           FOLHAGEM: { baseDates: [], pendingDates: [], orderDate: todayISO(), increasePct: 0 },
           BANDEJA: { baseDates: [], pendingDates: [], orderDate: todayISO(), increasePct: 0 }
@@ -1340,6 +1341,8 @@
   function matchStoreInData(rawName, redeHint='', stores=[]){
     const raw = normalize(rawName);
     if (!raw) return null;
+    const manualStore = resolveManualStoreAlias(rawName, redeHint, stores || []);
+    if (manualStore) return manualStore;
     const known = storeOverrideByKnownSalesName(rawName, redeHint, stores || []);
     if (known) return known;
 
@@ -1367,7 +1370,7 @@
       const rawProduct = row.productRaw || row.productName || '';
 
       const store = rawStore ? matchStoreInData(rawStore, rede, stores) : null;
-      const product = rawProduct ? matchProductFromList(cleanSalesProductName(rawProduct), products) : null;
+      const product = rawProduct ? matchProductFromList(rawProduct, products) : null;
 
       const next = {
         ...row,
@@ -1627,6 +1630,9 @@
     data.cancelledNfes ||= [];
     data.importDuplicates ||= [];
     data.deletedImports ||= [];
+    data.nameReconciliations ||= {};
+    data.nameReconciliations.products ||= {};
+    data.nameReconciliations.stores ||= {};
     fixKnownProductConfusions(data);
     reconcileSalesReferences(data);
     data.conciliation ||= {
@@ -1788,6 +1794,52 @@
     return activeProducts(type).filter(p => isProductActiveForStore(storeId, p.id));
   }
 
+  function nameReconciliationStore(){
+    Store.data ||= Store.seed();
+    Store.data.nameReconciliations ||= {};
+    Store.data.nameReconciliations.products ||= {};
+    Store.data.nameReconciliations.stores ||= {};
+    return Store.data.nameReconciliations;
+  }
+
+  function productAliasKeyFromRaw(value){
+    return normalize(String(value || '').split('|')[0].trim());
+  }
+
+  function storeAliasKeyFromRaw(value, rede=''){
+    const raw = normalize(value);
+    if (!raw) return '';
+    return `${normalize(rede || '')}|${raw}`;
+  }
+
+  function resolveManualProductAlias(rawName, productList=[]){
+    const key = productAliasKeyFromRaw(rawName);
+    if (!key) return null;
+    const aliases = Store.data?.nameReconciliations?.products || {};
+    const rec = aliases[key];
+    const targetId = typeof rec === 'string' ? rec : rec?.targetId;
+    if (!targetId) return null;
+    return (productList || []).find(p => p.id === targetId) || (Store.data?.products || []).find(p => p.id === targetId) || null;
+  }
+
+  function resolveManualStoreAlias(rawName, redeHint='', stores=[]){
+    const raw = normalize(rawName);
+    if (!raw) return null;
+    const aliases = Store.data?.nameReconciliations?.stores || {};
+    const possibleKeys = unique([
+      storeAliasKeyFromRaw(rawName, redeHint),
+      storeAliasKeyFromRaw(rawName, ''),
+      storeAliasKeyFromRaw(rawName, inferRedeFromText(rawName || redeHint || ''))
+    ]).filter(Boolean);
+    let rec = null;
+    for (const key of possibleKeys) {
+      if (aliases[key]) { rec = aliases[key]; break; }
+    }
+    const targetId = typeof rec === 'string' ? rec : rec?.targetId;
+    if (!targetId) return null;
+    return (stores || []).find(s => s.id === targetId) || (Store.data?.stores || []).find(s => s.id === targetId) || null;
+  }
+
   function matchProduct(rawName){
     try { ensureProductCatalogFallback(Store.data || (Store.data = Store.seed())); } catch(_) {}
     const catalog = (Store.data?.products && Store.data.products.length ? Store.data.products : (window.DEFAULT_PRODUCTS || FALLBACK_ACTIVE_PRODUCTS));
@@ -1799,6 +1851,9 @@
     const rawOriginal = normalize(original);
     let raw = rawOriginal;
     if (!raw) return null;
+
+    const manualProduct = resolveManualProductAlias(original, productList || []);
+    if (manualProduct) return manualProduct;
 
     const directId = XML_PRODUCT_DIRECT_ID[rawOriginal] || XML_PRODUCT_DIRECT_ID[rawOriginal.replace(/\bUND\b/g,'').replace(/\s+/g,' ').trim()];
     if (directId) {
@@ -2037,6 +2092,9 @@
     }
     const raw = normalize(rawName);
     if (!raw) return null;
+
+    const manualStore = resolveManualStoreAlias(rawName, redeHint, Store.data.stores || []);
+    if (manualStore) return manualStore;
 
     // Correções determinísticas para nomes curtos/ambíguos da base de vendas.
     // Isso evita, por exemplo, NOVO GAMA cair em DD GAMA e EPTG cair em VICENTE PIRES.
@@ -5387,6 +5445,27 @@
     });
   }
 
+  function linkImportIssueProductToProduct(key){
+    const issue = findImportIssueByKey(key);
+    if (!issue) return toast('Erro não encontrado.', 'warn');
+    const rawName = importIssueProductRaw(issue);
+    const targetId = document.getElementById('issue-product-link-select')?.value || '';
+    const product = productById(targetId);
+    if (!rawName) return toast('Produto não identificado nesse erro.', 'warn');
+    if (!product) return toast('Selecione o produto correto.', 'warn');
+
+    const recs = nameReconciliationStore();
+    const aliasKey = productAliasKeyFromRaw(rawName);
+    recs.products[aliasKey] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[aliasKey]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    const affected = applyManualNameReconciliations();
+    const removed = clearProductIssuesByRaw(rawName);
+    Store.save().then(() => {
+      closeModal();
+      toast(`Produto conciliado a ${product.nomeSistema}. ${fmt.format(affected)} registro(s) atualizado(s) e ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+      render();
+    });
+  }
+
   function importIssueStoreSelectHtml(){
     // Monta a lista de lojas para vínculo do CNPJ usando TODAS as fontes possíveis.
     // Isso evita o modal vazio quando o Firebase/cache ainda não carregou o cadastro padrão.
@@ -5457,6 +5536,18 @@
         </div>
       ` : ''}
       ${cnpj && store ? `<div class="panel" style="margin-top:14px"><strong class="positive">Este CNPJ já está vinculado.</strong><p class="muted small">Limpe esse erro antigo e importe o XML novamente para registrar as notas com o cadastro atualizado.</p></div>` : ''}
+      ${importIssueProductRaw(issue) ? `
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head"><h4>Conciliar produto não reconhecido</h4></div>
+          <p class="muted small">Produto da importação: <strong>${escapeHtml(importIssueProductRaw(issue))}</strong>. Selecione o produto correto uma vez; todos os erros iguais serão resolvidos por essa conciliação.</p>
+          <div class="form-grid">
+            <label>Produto correto<select id="issue-product-link-select">${productSelectOptionsHtml(resolveManualProductAlias(importIssueProductRaw(issue), Store.data.products || [])?.id || '')}</select></label>
+          </div>
+          <div class="footer-actions">
+            <button class="btn" type="button" onclick="App.linkImportIssueProductToProduct(${jsArg(key)})">Conciliar produto</button>
+          </div>
+        </div>
+      ` : ''}
       <div style="margin-top:14px">
         <h4>Detalhe completo</h4>
         <p class="muted">${escapeHtml(issue.detail || 'Sem detalhe adicional.')}</p>
@@ -6607,8 +6698,241 @@
   }
 
 
+  function productSelectOptionsHtml(selected=''){
+    const products = activeProducts(null).sort((a,b)=>String(a.nomeSistema||'').localeCompare(String(b.nomeSistema||''),'pt-BR'));
+    return `<option value="">Selecionar produto...</option>${products.map(p=>`<option value="${escapeHtml(p.id)}" ${p.id===selected?'selected':''}>${escapeHtml(p.nomeSistema)} • ${escapeHtml(p.tipo || '')}</option>`).join('')}`;
+  }
+
+  function storeSelectOptionsHtml(selected=''){
+    const stores = (Store.data.stores || []).slice().sort((a,b)=>`${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`,'pt-BR'));
+    return `<option value="">Selecionar loja...</option>${stores.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===selected?'selected':''}>${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`).join('')}`;
+  }
+
+  function importIssueProductRaw(issue){
+    const text = String(issue?.detail || '');
+    if (!/Produto não reconhecido/i.test(`${issue?.message || ''} ${text}`)) return '';
+    const afterColon = text.includes(':') ? text.split(':').slice(1).join(':').trim() : text.trim();
+    const cleaned = afterColon.replace(/\.$/,'').trim();
+    if (!cleaned) return '';
+    if (cleaned.includes('|')) return cleaned.split('|').pop().trim();
+    return cleaned.replace(/\s+na loja\s+.+$/i,'').trim();
+  }
+
+  function importIssueStoreRaw(issue){
+    const text = String(issue?.detail || '');
+    if (!/Loja não reconhecida/i.test(`${issue?.message || ''} ${text}`)) return '';
+    const afterColon = text.includes(':') ? text.split(':').slice(1).join(':').trim() : text.trim();
+    return afterColon.replace(/\s*\(pedido.+$/i,'').replace(/\s*\|\s*CNPJ.+$/i,'').replace(/\.$/,'').trim();
+  }
+
+  function pendingProductAliasGroups(){
+    const map = new Map();
+    const add = (raw, source, rede='', storeRaw='', qty=0, records=1, date='') => {
+      const key = productAliasKeyFromRaw(raw);
+      if (!key) return;
+      const manual = resolveManualProductAlias(raw, Store.data.products || []);
+      if (manual) return;
+      if (!map.has(key)) map.set(key, {key, rawName:String(raw || '').trim(), source:new Set(), redes:new Set(), stores:new Set(), records:0, qty:0, dates:new Set()});
+      const g = map.get(key);
+      g.source.add(source || '');
+      if (rede) g.redes.add(rede);
+      if (storeRaw) g.stores.add(storeRaw);
+      g.records += toNumber(records || 1);
+      g.qty += toNumber(qty || 0);
+      if (date) g.dates.add(date);
+    };
+    (Store.data.sales || []).forEach(r => { if (!r.productId) add(r.productRaw || r.productName, 'Base de Venda', r.rede, r.storeRaw || r.storeName, r.qty, r.sourceRecords || 1, r.date); });
+    (Store.data.importIssues || []).forEach(i => { const raw = importIssueProductRaw(i); if (raw) add(raw, i.type || i.source || 'XML/PDF', '', '', 0, 1, ''); });
+    return Array.from(map.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR'));
+  }
+
+  function pendingStoreAliasGroups(){
+    const map = new Map();
+    const add = (raw, rede, source, productRaw='', qty=0, records=1, date='') => {
+      const key = storeAliasKeyFromRaw(raw, rede);
+      if (!key) return;
+      const manual = resolveManualStoreAlias(raw, rede, Store.data.stores || []);
+      if (manual) return;
+      if (!map.has(key)) map.set(key, {key, rawName:String(raw || '').trim(), rede:rede || '', source:new Set(), products:new Set(), records:0, qty:0, dates:new Set()});
+      const g = map.get(key);
+      g.source.add(source || '');
+      if (productRaw) g.products.add(productRaw);
+      g.records += toNumber(records || 1);
+      g.qty += toNumber(qty || 0);
+      if (date) g.dates.add(date);
+    };
+    (Store.data.sales || []).forEach(r => { if (!r.storeId) add(r.storeRaw || r.storeName, r.rede, 'Base de Venda', r.productRaw || r.productName, r.qty, r.sourceRecords || 1, r.date); });
+    (Store.data.importIssues || []).forEach(i => { const raw = importIssueStoreRaw(i); if (raw && !importIssueCnpj(i)) add(raw, '', i.type || i.source || 'XML/PDF', '', 0, 1, ''); });
+    return Array.from(map.values()).sort((a,b)=> b.records - a.records || a.rawName.localeCompare(b.rawName,'pt-BR'));
+  }
+
+  function reconciliationRows(type){
+    const map = type === 'store' ? (Store.data.nameReconciliations?.stores || {}) : (Store.data.nameReconciliations?.products || {});
+    return Object.entries(map).map(([key, rec]) => ({key, ...(typeof rec === 'string' ? {targetId:rec} : rec)})).sort((a,b)=>String(b.updatedAt||b.createdAt||'').localeCompare(String(a.updatedAt||a.createdAt||'')));
+  }
+
+  function applyManualNameReconciliations(){
+    let changed = 0;
+    Store.data.sales = (Store.data.sales || []).map(r => {
+      let next = {...r};
+      const store = resolveManualStoreAlias(next.storeRaw || next.storeName, next.rede, Store.data.stores || []);
+      const product = resolveManualProductAlias(next.productRaw || next.productName, Store.data.products || []);
+      if (store && next.storeId !== store.id) { next.storeId = store.id; next.storeName = store.nome; changed++; }
+      if (product && next.productId !== product.id) { next.productId = product.id; next.productName = product.nomeSistema; changed++; }
+      return next;
+    });
+    reconcileSalesReferences(Store.data);
+    return changed;
+  }
+
+  function clearProductIssuesByRaw(rawName){
+    const key = productAliasKeyFromRaw(rawName);
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => productAliasKeyFromRaw(importIssueProductRaw(i)) !== key);
+    return before - (Store.data.importIssues || []).length;
+  }
+
+  function clearStoreIssuesByRaw(rawName, rede=''){
+    const key = storeAliasKeyFromRaw(rawName, rede);
+    const rawOnly = storeAliasKeyFromRaw(rawName, '');
+    const before = (Store.data.importIssues || []).length;
+    Store.data.importIssues = (Store.data.importIssues || []).filter(i => {
+      const raw = importIssueStoreRaw(i);
+      if (!raw) return true;
+      const issueKey = storeAliasKeyFromRaw(raw, rede);
+      const issueRawOnly = storeAliasKeyFromRaw(raw, '');
+      return issueKey !== key && issueRawOnly !== rawOnly;
+    });
+    return before - (Store.data.importIssues || []).length;
+  }
+
+  async function saveProductNameReconciliation(){
+    const rawName = String($('#aliasProductRaw')?.value || '').trim();
+    const targetId = $('#aliasProductTarget')?.value || '';
+    const product = productById(targetId);
+    if (!rawName) return toast('Informe o nome do produto como aparece na planilha/XML/PDF.', 'warn');
+    if (!product) return toast('Selecione o produto correto do cadastro.', 'warn');
+    const key = productAliasKeyFromRaw(rawName);
+    const recs = nameReconciliationStore();
+    recs.products[key] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    const affected = applyManualNameReconciliations();
+    const removed = clearProductIssuesByRaw(rawName);
+    await Store.save();
+    toast(`Produto conciliado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    render();
+  }
+
+  async function saveStoreNameReconciliation(){
+    const rawName = String($('#aliasStoreRaw')?.value || '').trim();
+    const targetId = $('#aliasStoreTarget')?.value || '';
+    const store = storeById(targetId);
+    if (!rawName) return toast('Informe o nome da loja como aparece na planilha/XML/PDF.', 'warn');
+    if (!store) return toast('Selecione a loja correta do cadastro.', 'warn');
+    const key = storeAliasKeyFromRaw(rawName, store.rede || '');
+    const recs = nameReconciliationStore();
+    recs.stores[key] = {rawName, rede:store.rede || '', targetId:store.id, targetName:store.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    const affected = applyManualNameReconciliations();
+    const removed = clearStoreIssuesByRaw(rawName, store.rede || '');
+    await Store.save();
+    toast(`Loja conciliada: ${rawName} → ${store.nome}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    render();
+  }
+
+  async function deleteNameReconciliation(type, key){
+    const recs = nameReconciliationStore();
+    const map = type === 'store' ? recs.stores : recs.products;
+    if (!map[key]) return toast('Conciliação não encontrada.', 'warn');
+    if (!confirm('Excluir esta conciliação? As próximas importações voltarão a depender do reconhecimento automático.')) return;
+    delete map[key];
+    applyManualNameReconciliations();
+    await Store.save();
+    toast('Conciliação removida.');
+    render();
+  }
+
+  function fillProductReconciliation(rawName){
+    go('conciliacao');
+    setTimeout(()=>{
+      const input = $('#aliasProductRaw');
+      if (input) { input.value = rawName || ''; input.focus(); input.scrollIntoView({behavior:'smooth', block:'center'}); }
+    }, 50);
+  }
+
+  function fillStoreReconciliation(rawName){
+    go('conciliacao');
+    setTimeout(()=>{
+      const input = $('#aliasStoreRaw');
+      if (input) { input.value = rawName || ''; input.focus(); input.scrollIntoView({behavior:'smooth', block:'center'}); }
+    }, 50);
+  }
+
+  function renderNameReconciliationPanel(){
+    const productPendencies = pendingProductAliasGroups().slice(0,120);
+    const storePendencies = pendingStoreAliasGroups().slice(0,120);
+    const productAliases = reconciliationRows('product');
+    const storeAliases = reconciliationRows('store');
+    return `
+      <div class="card">
+        <div class="panel-head">
+          <div>
+            <h3>Conciliação de nomes da planilha/XML/PDF</h3>
+            <p class="muted">Quando a base trouxer um nome diferente, selecione uma vez o produto ou loja correta. O sistema passará a resolver automaticamente todos os erros iguais na próxima importação e também recalcula os registros de venda já carregados.</p>
+          </div>
+          <span class="badge amber">Novo</span>
+        </div>
+        <div class="grid two">
+          <div class="panel">
+            <h4>Conciliar produto</h4>
+            <div class="form-grid compact-grid">
+              <label>Nome do produto na planilha/XML/PDF<input id="aliasProductRaw" placeholder="Ex.: BROCOLIS SÓ FOLHAS AMERICANO"></label>
+              <label>Produto correto no cadastro<select id="aliasProductTarget">${productSelectOptionsHtml()}</select></label>
+            </div>
+            <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveProductNameReconciliation()">Salvar conciliação do produto</button></div>
+            <p class="muted small">Exemplo: BROCOLIS SÓ FOLHAS AMERICANO → BRÓCOLIS AMERICANO. Todos os erros iguais passam a usar esse produto.</p>
+          </div>
+          <div class="panel">
+            <h4>Conciliar loja</h4>
+            <div class="form-grid compact-grid">
+              <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreRaw" placeholder="Ex.: 005-VALPARSO"></label>
+              <label>Loja correta no cadastro<select id="aliasStoreTarget">${storeSelectOptionsHtml()}</select></label>
+            </div>
+            <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliation()">Salvar conciliação da loja</button></div>
+            <p class="muted small">Use quando a base vier com código, abreviação ou erro de grafia da loja.</p>
+          </div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Produtos pendentes para conciliar</h3>
+          <div class="table-wrap"><table><thead><tr><th>Produto da planilha/XML/PDF</th><th>Origem</th><th class="num">Linhas</th><th class="num">Qtd</th><th>Ação</th></tr></thead><tbody>
+            ${productPendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong><br><span class="muted small">${Array.from(g.redes).slice(0,3).map(escapeHtml).join(', ')}</span></td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td class="num">${fmt.format(g.qty)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillProductReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem produto pendente de conciliação.</td></tr>`}
+          </tbody></table></div>
+        </div>
+        <div class="card">
+          <h3>Lojas pendentes para conciliar</h3>
+          <div class="table-wrap"><table><thead><tr><th>Loja da planilha/XML/PDF</th><th>Rede</th><th>Origem</th><th class="num">Linhas</th><th>Ação</th></tr></thead><tbody>
+            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
+          </tbody></table></div>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <h3>Produtos já conciliados</h3>
+          <div class="table-wrap"><table><thead><tr><th>Nome de entrada</th><th>Produto correto</th><th>Atualizado por</th><th></th></tr></thead><tbody>
+            ${productAliases.map(r=>`<tr><td>${escapeHtml(r.rawName || r.key)}</td><td><strong>${escapeHtml(r.targetName || productById(r.targetId)?.nomeSistema || r.targetId || '')}</strong></td><td>${escapeHtml(r.user || '—')}<br><span class="muted small">${formatDateTime(r.updatedAt || r.createdAt)}</span></td><td class="num"><button class="btn btn-sm btn-danger" type="button" onclick="App.deleteNameReconciliation('product', ${jsArg(r.key)})">Excluir</button></td></tr>`).join('') || `<tr><td colspan="4" class="center muted">Nenhum produto conciliado manualmente.</td></tr>`}
+          </tbody></table></div>
+        </div>
+        <div class="card">
+          <h3>Lojas já conciliadas</h3>
+          <div class="table-wrap"><table><thead><tr><th>Nome de entrada</th><th>Loja correta</th><th>Atualizado por</th><th></th></tr></thead><tbody>
+            ${storeAliases.map(r=>`<tr><td>${escapeHtml(r.rawName || r.key)}</td><td><strong>${escapeHtml(r.targetName || storeById(r.targetId)?.nome || r.targetId || '')}</strong><br><span class="muted small">${escapeHtml(r.rede || '')}</span></td><td>${escapeHtml(r.user || '—')}<br><span class="muted small">${formatDateTime(r.updatedAt || r.createdAt)}</span></td><td class="num"><button class="btn btn-sm btn-danger" type="button" onclick="App.deleteNameReconciliation('store', ${jsArg(r.key)})">Excluir</button></td></tr>`).join('') || `<tr><td colspan="4" class="center muted">Nenhuma loja conciliada manualmente.</td></tr>`}
+          </tbody></table></div>
+        </div>
+      </div>`;
+  }
+
   function renderConciliation(){
-    setTitle('Conciliação da Base de Venda', 'Escolha datas comparativas, aplique percentual de aumento e gere sugestão média por item.');
+    setTitle('Conciliação da Base de Venda', 'Concilie nomes de planilhas/XML/PDF e configure as datas comparativas da sugestão.');
     const allDates = unique((Store.data.sales || []).map(s=>s.date)).sort();
     const dateOptionsHtml = (selected=[], color='green') => allDates.map(d => `<label class="badge ${selected?.includes(d)?color:'gray'}"><input type="checkbox" data-conc-type="__TYPE__" data-conc-field="__FIELD__" value="${d}" ${selected?.includes(d)?'checked':''}> ${formatDate(d)}</label>`).join('');
     const sections = ['FOLHAGEM','BANDEJA'].map(type=>{
@@ -6632,6 +6956,7 @@
       </div>`;
     }).join('');
     $('#viewRoot').innerHTML = `
+      ${renderNameReconciliationPanel()}
       <div class="card">
         <h3>Como a sugestão será calculada</h3>
         <div class="grid kpis">
@@ -8127,7 +8452,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=54');
+        worker = new Worker('sales-worker.js?v=58');
       } catch(e) {
         return reject(e);
       }
@@ -8163,7 +8488,8 @@
           importId,
           importedAt,
           stores: Store.data.stores || [],
-          products: Store.data.products || []
+          products: Store.data.products || [],
+          nameReconciliations: Store.data.nameReconciliations || {products:{}, stores:{}}
         }, [buffer]);
       } catch(e) {
         clearTimeout(timeout);
@@ -8373,11 +8699,11 @@
         const filialText = String(filial).trim();
         const cleanProduct = cleanSalesProductName(productRaw);
         const storeKey = `${rede}|${normalize(filialText)}`;
-        const prodKey = normalize(cleanProduct);
+        const prodKey = normalize(String(productRaw || '').trim());
         let store = storeCache.get(storeKey);
         if (store === undefined) { store = matchStore(filialText, rede); storeCache.set(storeKey, store || null); }
         let product = productCache.get(prodKey);
-        if (product === undefined) { product = matchProduct(cleanProduct); productCache.set(prodKey, product || null); }
+        if (product === undefined) { product = matchProduct(productRaw); productCache.set(prodKey, product || null); }
         if (!store) unmatchedStores++;
         if (!product) unmatchedProducts++;
 
@@ -8678,7 +9004,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
