@@ -544,3 +544,10 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Ao clicar em Conciliar nas lojas pendentes, abre modal com o nome recebido, rede e lista de lojas oficiais.
 - A lista usa a mesma fonte robusta do seletor: Firebase, default-data.js e mapa de CNPJs.
 - O sistema tenta sugerir automaticamente a loja mais provável e permite salvar direto no modal.
+
+
+## Versão v63 - Conciliação seletiva de lojas
+- Botão Conciliar das lojas pendentes abre modal direto para o item selecionado.
+- Salvar conciliação de loja aplica somente nos registros com o mesmo nome recebido, evitando reprocessar a base inteira.
+- Salvar conciliação de produto também passou a aplicar somente o nome conciliado.
+- Remoção de conciliação não dispara mais reprocessamento pesado da base.

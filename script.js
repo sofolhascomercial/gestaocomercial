@@ -6910,6 +6910,54 @@
     return changed;
   }
 
+  function sameReconciliationRede(rowRede='', redeHint=''){
+    if (!redeHint) return true;
+    const a = normalize(rowRede || '');
+    const b = normalize(redeHint || '');
+    if (!a || !b) return true;
+    return a === b || a.includes(b) || b.includes(a) || a.split(' ')[0] === b.split(' ')[0];
+  }
+
+  function applySingleStoreNameReconciliation(rawName, store, redeHint=''){
+    const rawOnlyKey = storeAliasKeyFromRaw(rawName, '');
+    if (!rawOnlyKey || !store?.id) return {rows:0, records:0};
+    let rows = 0;
+    let records = 0;
+    const targetName = store.nome || store.nomeSistema || store.name || store.id;
+    const targetRede = store.rede || store.network || redeHint || '';
+    (Store.data.sales || []).forEach(r => {
+      const rowRaw = r.storeRaw || r.storeName || '';
+      if (storeAliasKeyFromRaw(rowRaw, '') !== rawOnlyKey) return;
+      if (!sameReconciliationRede(r.rede || '', redeHint || targetRede || '')) return;
+      if (r.storeId !== store.id || r.storeName !== targetName || (targetRede && r.rede !== targetRede)) {
+        r.storeId = store.id;
+        r.storeName = targetName;
+        if (targetRede) r.rede = targetRede;
+        rows++;
+        records += toNumber(r.sourceRecords || 1);
+      }
+    });
+    return {rows, records};
+  }
+
+  function applySingleProductNameReconciliation(rawName, product){
+    const key = productAliasKeyFromRaw(rawName);
+    if (!key || !product?.id) return {rows:0, records:0};
+    let rows = 0;
+    let records = 0;
+    (Store.data.sales || []).forEach(r => {
+      const rowRaw = r.productRaw || r.productName || '';
+      if (productAliasKeyFromRaw(rowRaw) !== key) return;
+      if (r.productId !== product.id || r.productName !== product.nomeSistema) {
+        r.productId = product.id;
+        r.productName = product.nomeSistema;
+        rows++;
+        records += toNumber(r.sourceRecords || 1);
+      }
+    });
+    return {rows, records};
+  }
+
   function clearProductIssuesByRaw(rawName){
     const key = productAliasKeyFromRaw(rawName);
     const before = (Store.data.importIssues || []).length;
@@ -6940,10 +6988,11 @@
     const key = productAliasKeyFromRaw(rawName);
     const recs = nameReconciliationStore();
     recs.products[key] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
-    const affected = applyManualNameReconciliations();
+    const affected = applySingleProductNameReconciliation(rawName, product);
     const removed = clearProductIssuesByRaw(rawName);
-    await Store.save();
-    toast(`Produto conciliado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    state.reconciliationCache = null;
+    Store.queueSave({}, 900);
+    toast(`Produto conciliado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
     render();
   }
 
@@ -6965,10 +7014,11 @@
     const key = storeAliasKeyFromRaw(rawName, redeHint || normalizedStore.rede || '');
     const recs = nameReconciliationStore();
     recs.stores[key] = {rawName, rede:redeHint || normalizedStore.rede || '', targetId:normalizedStore.id, targetName:normalizedStore.nome, createdAt:recs.stores[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
-    const affected = applyManualNameReconciliations();
+    const affected = applySingleStoreNameReconciliation(rawName, normalizedStore, redeHint || normalizedStore.rede || '');
     const removed = clearStoreIssuesByRaw(rawName, redeHint || normalizedStore.rede || '');
-    await Store.save();
-    toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
+    state.reconciliationCache = null;
+    Store.queueSave({}, 900);
+    toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
     closeModal();
     render();
   }
@@ -6987,8 +7037,8 @@
     if (!map[key]) return toast('Conciliação não encontrada.', 'warn');
     if (!confirm('Excluir esta conciliação? As próximas importações voltarão a depender do reconhecimento automático.')) return;
     delete map[key];
-    applyManualNameReconciliations();
-    await Store.save();
+    state.reconciliationCache = null;
+    Store.queueSave({}, 900);
     toast('Conciliação removida.');
     render();
   }
@@ -7007,36 +7057,28 @@
   }
 
   function fillStoreReconciliation(rawName, redeHint=''){
-    go('conciliacao');
-    setTimeout(()=>{
-      const guess = guessStoreForReconciliation(rawName, redeHint);
-      const selectedId = guess?.id || '';
-      const input = $('#aliasStoreRaw');
-      const select = $('#aliasStoreTarget');
-      const redeInput = $('#aliasStoreRedeHint');
-      if (input) input.value = rawName || '';
-      if (redeInput) redeInput.value = redeHint || '';
-      if (select) select.value = selectedId;
-      openModal('Conciliar loja', `
-        <div class="issue-detail-box">
-          <div><span>Nome recebido</span><strong>${escapeHtml(rawName || '—')}</strong></div>
-          <div><span>Rede informada</span><strong>${escapeHtml(redeHint || '—')}</strong></div>
-          <div><span>Sugestão automática</span><strong>${escapeHtml(guess ? `${guess.rede} • ${guess.nome}` : 'Selecione manualmente')}</strong></div>
+    const guess = guessStoreForReconciliation(rawName, redeHint);
+    const selectedId = guess?.id || '';
+    const cleanRaw = String(rawName || '').trim();
+    openModal('Conciliar loja', `
+      <div class="issue-detail-box">
+        <div><span>Nome recebido</span><strong>${escapeHtml(cleanRaw || '—')}</strong></div>
+        <div><span>Rede informada</span><strong>${escapeHtml(redeHint || '—')}</strong></div>
+        <div><span>Sugestão automática</span><strong>${escapeHtml(guess ? `${guess.rede} • ${guess.nome}` : 'Selecione manualmente')}</strong></div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <div class="form-grid compact-grid">
+          <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreModalRaw" value="${escapeHtml(cleanRaw)}"></label>
+          <label>Loja correta no cadastro<select id="aliasStoreModalTarget">${storeSelectOptionsHtml(selectedId)}</select></label>
         </div>
-        <div class="panel" style="margin-top:12px">
-          <div class="form-grid compact-grid">
-            <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreModalRaw" value="${escapeHtml(rawName || '')}"></label>
-            <label>Loja correta no cadastro<select id="aliasStoreModalTarget">${storeSelectOptionsHtml(selectedId)}</select></label>
-          </div>
-          <input type="hidden" id="aliasStoreModalRede" value="${escapeHtml(redeHint || '')}">
-          <p class="muted small">Selecione a loja correta uma vez. O sistema usará essa conciliação para todos os erros iguais dessa loja.</p>
-          <div class="actions modal-actions">
-            <button class="btn" type="button" onclick="App.closeModal()">Cancelar</button>
-            <button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliationFromModal()">Salvar conciliação da loja</button>
-          </div>
-        </div>`);
-      setTimeout(()=>$('#aliasStoreModalTarget')?.focus(), 80);
-    }, 50);
+        <input type="hidden" id="aliasStoreModalRede" value="${escapeHtml(redeHint || '')}">
+        <p class="muted small">Selecione a loja correta uma vez. O sistema corrigirá todos os registros com esse mesmo nome recebido e usará essa regra nas próximas importações.</p>
+        <div class="actions modal-actions">
+          <button class="btn" type="button" onclick="App.closeModal()">Cancelar</button>
+          <button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliationFromModal()">Salvar conciliação da loja</button>
+        </div>
+      </div>`);
+    setTimeout(()=>$('#aliasStoreModalTarget')?.focus(), 80);
   }
 
   function renderNameReconciliationPanel(){
@@ -8644,7 +8686,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=62');
+        worker = new Worker('sales-worker.js?v=63');
       } catch(e) {
         return reject(e);
       }
