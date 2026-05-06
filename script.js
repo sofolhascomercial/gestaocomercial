@@ -5466,34 +5466,9 @@
     });
   }
 
+
   function importIssueStoreSelectHtml(){
-    // Monta a lista de lojas para vínculo do CNPJ usando TODAS as fontes possíveis.
-    // Isso evita o modal vazio quando o Firebase/cache ainda não carregou o cadastro padrão.
-    const byId = new Map();
-    const addStore = (store) => {
-      if (!store || !store.id) return;
-      const nome = store.nome || store.nomeSistema || store.name || store.id;
-      const rede = store.rede || store.network || 'REDE';
-      byId.set(store.id, {...store, nome, rede});
-    };
-
-    enrichStoreCnpjs(mergeCadastroById(Store.data?.stores || [], window.DEFAULT_STORES || [])).forEach(addStore);
-    (window.DEFAULT_STORES || []).forEach(addStore);
-
-    // Fallback direto a partir do mapa oficial de CNPJ, mesmo quando default-data.js não carregou.
-    Object.values(STORE_CNPJ_INFO || {}).forEach(info => addStore({
-      id: info.id,
-      nome: info.nome,
-      rede: info.rede,
-      cnpjs: Object.entries(STORE_CNPJ_INFO || {})
-        .filter(([, item]) => item?.id === info.id)
-        .map(([cnpj]) => cnpj)
-    }));
-
-    const stores = Array.from(byId.values())
-      .filter(s => s?.id && s?.nome)
-      .sort((a,b) => `${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`, 'pt-BR'));
-
+    const stores = allKnownStoresForSelection();
     const options = stores
       .map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`)
       .join('');
@@ -6703,9 +6678,34 @@
     return `<option value="">Selecionar produto...</option>${products.map(p=>`<option value="${escapeHtml(p.id)}" ${p.id===selected?'selected':''}>${escapeHtml(p.nomeSistema)} • ${escapeHtml(p.tipo || '')}</option>`).join('')}`;
   }
 
+  function allKnownStoresForSelection(){
+    const byId = new Map();
+    const addStore = (store) => {
+      if (!store || !store.id) return;
+      const nome = store.nome || store.nomeSistema || store.name || store.id;
+      const rede = store.rede || store.network || 'REDE';
+      byId.set(store.id, {...store, nome, rede});
+    };
+    enrichStoreCnpjs(mergeCadastroById(Store.data?.stores || [], window.DEFAULT_STORES || [])).forEach(addStore);
+    (window.DEFAULT_STORES || []).forEach(addStore);
+    Object.values(STORE_CNPJ_INFO || {}).forEach(info => addStore({
+      id: info.id,
+      nome: info.nome,
+      rede: info.rede,
+      cnpjs: Object.entries(STORE_CNPJ_INFO || {})
+        .filter(([, item]) => item?.id === info.id)
+        .map(([cnpj]) => cnpj)
+    }));
+    return Array.from(byId.values())
+      .filter(s => s?.id && s?.nome)
+      .sort((a,b)=>`${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`,'pt-BR'));
+  }
+
   function storeSelectOptionsHtml(selected=''){
-    const stores = (Store.data.stores || []).slice().sort((a,b)=>`${a.rede} ${a.nome}`.localeCompare(`${b.rede} ${b.nome}`,'pt-BR'));
-    return `<option value="">Selecionar loja...</option>${stores.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===selected?'selected':''}>${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`).join('')}`;
+    const stores = allKnownStoresForSelection();
+    const options = stores.map(s=>`<option value="${escapeHtml(s.id)}" ${s.id===selected?'selected':''}>${escapeHtml(s.rede)} • ${escapeHtml(s.nome)}</option>`).join('');
+    if (!options) return `<option value="">Nenhuma loja carregada</option>`;
+    return `<option value="">Selecionar loja...</option>${options}`;
   }
 
   function importIssueProductRaw(issue){
@@ -6866,73 +6866,93 @@
     }, 50);
   }
 
+
   function renderNameReconciliationPanel(){
     const productPendencies = pendingProductAliasGroups().slice(0,120);
     const storePendencies = pendingStoreAliasGroups().slice(0,120);
     const productAliases = reconciliationRows('product');
     const storeAliases = reconciliationRows('store');
+    const manualCount = productAliases.length + storeAliases.length;
+    const pendingCount = productPendencies.length + storePendencies.length;
     return `
-      <div class="card">
-        <div class="panel-head">
-          <div>
-            <h3>Conciliação de nomes da planilha/XML/PDF</h3>
-            <p class="muted">Quando a base trouxer um nome diferente, selecione uma vez o produto ou loja correta. O sistema passará a resolver automaticamente todos os erros iguais na próxima importação e também recalcula os registros de venda já carregados.</p>
+      <div class="card reconciliation-shell">
+        <div class="reconciliation-hero">
+          <div class="reconciliation-hero-main">
+            <span class="eyebrow">Padronização inteligente</span>
+            <h2>Conciliação de nomes da planilha/XML/PDF</h2>
+            <p>Use esta central para padronizar nomes divergentes de loja e produto. Ao conciliar uma vez, o sistema reaproveita a regra nas próximas importações e também corrige registros já carregados na base.</p>
           </div>
-          <span class="badge amber">Novo</span>
+          <div class="metric-strip">
+            <div class="metric-mini"><span>Pendências</span><strong>${fmt.format(pendingCount)}</strong><small>nomes aguardando conciliação</small></div>
+            <div class="metric-mini"><span>Regras ativas</span><strong>${fmt.format(manualCount)}</strong><small>atalhos já aprendidos pelo sistema</small></div>
+            <div class="metric-mini"><span>Lojas carregadas</span><strong>${fmt.format(allKnownStoresForSelection().length)}</strong><small>disponíveis para seleção</small></div>
+          </div>
         </div>
-        <div class="grid two">
-          <div class="panel">
+        <div class="reconciliation-form-grid">
+          <section class="reconciliation-form-card">
+            <div class="section-tag">Produto</div>
             <h4>Conciliar produto</h4>
+            <p class="section-subtitle">Quando o nome vier com marca, código ou grafia diferente, selecione o produto oficial uma única vez.</p>
             <div class="form-grid compact-grid">
               <label>Nome do produto na planilha/XML/PDF<input id="aliasProductRaw" placeholder="Ex.: BROCOLIS SÓ FOLHAS AMERICANO"></label>
               <label>Produto correto no cadastro<select id="aliasProductTarget">${productSelectOptionsHtml()}</select></label>
             </div>
             <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveProductNameReconciliation()">Salvar conciliação do produto</button></div>
-            <p class="muted small">Exemplo: BROCOLIS SÓ FOLHAS AMERICANO → BRÓCOLIS AMERICANO. Todos os erros iguais passam a usar esse produto.</p>
-          </div>
-          <div class="panel">
+            <p class="muted small">Exemplo: BROCOLIS SÓ FOLHAS AMERICANO → BRÓCOLIS AMERICANO.</p>
+          </section>
+          <section class="reconciliation-form-card">
+            <div class="section-tag">Loja</div>
             <h4>Conciliar loja</h4>
+            <p class="section-subtitle">Use quando a base vier com código, abreviação ou nome diferente da loja cadastrada.</p>
             <div class="form-grid compact-grid">
               <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreRaw" placeholder="Ex.: 005-VALPARSO"></label>
               <label>Loja correta no cadastro<select id="aliasStoreTarget">${storeSelectOptionsHtml()}</select></label>
             </div>
             <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliation()">Salvar conciliação da loja</button></div>
-            <p class="muted small">Use quando a base vier com código, abreviação ou erro de grafia da loja.</p>
+            <p class="muted small">Exemplo: 005-VALPARSO → COSTA VALPARAISO.</p>
+          </section>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card table-shell">
+          <div class="panel-head table-headline"><div><h3>Produtos pendentes para conciliar</h3><p class="muted">Itens que ainda não foram vinculados a um produto oficial.</p></div><span class="badge amber">${fmt.format(productPendencies.length)}</span></div>
+          <div class="table-wrap compact-table">
+            <table><thead><tr><th>Nome recebido</th><th>Origem</th><th class="num">Registros</th><th class="num">Qtd</th><th></th></tr></thead><tbody>
+            ${productPendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong><br><span class="muted small">${Array.from(g.redes).slice(0,3).map(escapeHtml).join(', ')}</span></td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td class="num">${fmt.format(g.qty)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillProductReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem produto pendente de conciliação.</td></tr>`}
+            </tbody></table>
+          </div>
+        </div>
+        <div class="card table-shell">
+          <div class="panel-head table-headline"><div><h3>Lojas pendentes para conciliar</h3><p class="muted">Lojas vindas com código, abreviação ou variação de grafia.</p></div><span class="badge amber">${fmt.format(storePendencies.length)}</span></div>
+          <div class="table-wrap compact-table">
+            <table><thead><tr><th>Nome recebido</th><th>Rede</th><th>Origem</th><th class="num">Registros</th><th></th></tr></thead><tbody>
+            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
+            </tbody></table>
           </div>
         </div>
       </div>
       <div class="grid two">
-        <div class="card">
-          <h3>Produtos pendentes para conciliar</h3>
-          <div class="table-wrap"><table><thead><tr><th>Produto da planilha/XML/PDF</th><th>Origem</th><th class="num">Linhas</th><th class="num">Qtd</th><th>Ação</th></tr></thead><tbody>
-            ${productPendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong><br><span class="muted small">${Array.from(g.redes).slice(0,3).map(escapeHtml).join(', ')}</span></td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td class="num">${fmt.format(g.qty)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillProductReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem produto pendente de conciliação.</td></tr>`}
-          </tbody></table></div>
-        </div>
-        <div class="card">
-          <h3>Lojas pendentes para conciliar</h3>
-          <div class="table-wrap"><table><thead><tr><th>Loja da planilha/XML/PDF</th><th>Rede</th><th>Origem</th><th class="num">Linhas</th><th>Ação</th></tr></thead><tbody>
-            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
-          </tbody></table></div>
-        </div>
-      </div>
-      <div class="grid two">
-        <div class="card">
-          <h3>Produtos já conciliados</h3>
-          <div class="table-wrap"><table><thead><tr><th>Nome de entrada</th><th>Produto correto</th><th>Atualizado por</th><th></th></tr></thead><tbody>
+        <div class="card table-shell">
+          <div class="panel-head table-headline"><div><h3>Produtos já conciliados</h3><p class="muted">Regras manuais já salvas para reaproveitar automaticamente.</p></div><span class="badge green">${fmt.format(productAliases.length)}</span></div>
+          <div class="table-wrap compact-table">
+            <table><thead><tr><th>Nome original</th><th>Produto oficial</th><th>Última atualização</th><th class="num">Ação</th></tr></thead><tbody>
             ${productAliases.map(r=>`<tr><td>${escapeHtml(r.rawName || r.key)}</td><td><strong>${escapeHtml(r.targetName || productById(r.targetId)?.nomeSistema || r.targetId || '')}</strong></td><td>${escapeHtml(r.user || '—')}<br><span class="muted small">${formatDateTime(r.updatedAt || r.createdAt)}</span></td><td class="num"><button class="btn btn-sm btn-danger" type="button" onclick="App.deleteNameReconciliation('product', ${jsArg(r.key)})">Excluir</button></td></tr>`).join('') || `<tr><td colspan="4" class="center muted">Nenhum produto conciliado manualmente.</td></tr>`}
-          </tbody></table></div>
+            </tbody></table>
+          </div>
         </div>
-        <div class="card">
-          <h3>Lojas já conciliadas</h3>
-          <div class="table-wrap"><table><thead><tr><th>Nome de entrada</th><th>Loja correta</th><th>Atualizado por</th><th></th></tr></thead><tbody>
+        <div class="card table-shell">
+          <div class="panel-head table-headline"><div><h3>Lojas já conciliadas</h3><p class="muted">Mapeamentos salvos para reaproveitar em novas importações.</p></div><span class="badge green">${fmt.format(storeAliases.length)}</span></div>
+          <div class="table-wrap compact-table">
+            <table><thead><tr><th>Nome original</th><th>Loja oficial</th><th>Última atualização</th><th class="num">Ação</th></tr></thead><tbody>
             ${storeAliases.map(r=>`<tr><td>${escapeHtml(r.rawName || r.key)}</td><td><strong>${escapeHtml(r.targetName || storeById(r.targetId)?.nome || r.targetId || '')}</strong><br><span class="muted small">${escapeHtml(r.rede || '')}</span></td><td>${escapeHtml(r.user || '—')}<br><span class="muted small">${formatDateTime(r.updatedAt || r.createdAt)}</span></td><td class="num"><button class="btn btn-sm btn-danger" type="button" onclick="App.deleteNameReconciliation('store', ${jsArg(r.key)})">Excluir</button></td></tr>`).join('') || `<tr><td colspan="4" class="center muted">Nenhuma loja conciliada manualmente.</td></tr>`}
-          </tbody></table></div>
+            </tbody></table>
+          </div>
         </div>
       </div>`;
   }
 
   function renderConciliation(){
-    setTitle('Conciliação da Base de Venda', 'Concilie nomes de planilhas/XML/PDF e configure as datas comparativas da sugestão.');
+    setTitle('Conciliação da Base de Venda', 'Concilie nomes, padronize a leitura das importações e configure as datas comparativas da sugestão comercial.');
     const allDates = unique((Store.data.sales || []).map(s=>s.date)).sort();
     const dateOptionsHtml = (selected=[], color='green') => allDates.map(d => `<label class="badge ${selected?.includes(d)?color:'gray'}"><input type="checkbox" data-conc-type="__TYPE__" data-conc-field="__FIELD__" value="${d}" ${selected?.includes(d)?'checked':''}> ${formatDate(d)}</label>`).join('');
     const sections = ['FOLHAGEM','BANDEJA'].map(type=>{
@@ -6940,12 +6960,12 @@
       const baseDatesHtml = dateOptionsHtml(c.baseDates || [], 'green').replaceAll('__TYPE__', type).replaceAll('__FIELD__', 'baseDates');
       const pendingDatesHtml = dateOptionsHtml(c.pendingDates || [], 'amber').replaceAll('__TYPE__', type).replaceAll('__FIELD__', 'pendingDates');
       return `<div class="card conciliation-card">
-        <h3>${type==='FOLHAGEM'?'Folhagens':'Bandejas'}</h3>
+        <div class="panel-head table-headline"><div><h3>${type==='FOLHAGEM'?'Folhagens':'Bandejas'}</h3><p class="muted">Configure a base comparativa usada para sugestão de pedido.</p></div><span class="badge ${c.baseDates?.length?'green':'amber'}">${c.baseDates?.length?'Base pronta':'Pendente'}</span></div>
         <div class="form-grid compact">
           <label>Data de entrega<input type="date" data-conc-type="${type}" data-conc-field="orderDate" value="${c.orderDate||todayISO()}"></label>
           <label>% aumento da sugestão<input type="number" step="0.01" min="0" data-conc-type="${type}" data-conc-field="increasePct" value="${toNumber(c.increasePct)}" placeholder="Ex.: 25"></label>
         </div>
-        <div class="helper-box">
+        <div class="helper-box enterprise-helper">
           <strong>Regra aplicada:</strong> o sistema soma somente os dias com venda, divide pela quantidade de dias com venda, aplica o percentual de aumento e arredonda para cima.
         </div>
         <hr>
@@ -6958,7 +6978,7 @@
     $('#viewRoot').innerHTML = `
       ${renderNameReconciliationPanel()}
       <div class="card">
-        <h3>Como a sugestão será calculada</h3>
+        <div class="panel-head table-headline"><div><h3>Como a sugestão será calculada</h3><p class="muted">Fluxo de cálculo usado pelo sistema para transformar histórico de venda em sugestão comercial.</p></div></div>
         <div class="grid kpis">
           ${kpi('1','Seleciona datas', allDates.length ? fmt.format(allDates.length) : '0', 'datas disponíveis na base')}
           ${kpi('2','Média real', 'dias com venda', 'sem considerar data zerada')}
@@ -6986,7 +7006,6 @@
     });
     $('#saveConc').addEventListener('click', ()=>Store.save().then(()=>toast('Conciliação salva.')));
   }
-
   function renderMissingQuality(){
     setTitle('Faltas e Qualidade', 'Lançamento exclusivo do ADM/comercial. Abate entrega e calcula valor pelo custo do PDF.');
     const dates = unique(Store.data.deliveries.map(d=>d.date)).sort().reverse();
@@ -8452,7 +8471,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=58');
+        worker = new Worker('sales-worker.js?v=59');
       } catch(e) {
         return reject(e);
       }

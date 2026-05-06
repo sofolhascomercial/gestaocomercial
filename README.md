@@ -517,7 +517,7 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Atualizado cache para `v=56`.
 
 
-## Versão v58 - Conciliação de nomes
+## Versão v59 - Correção do seletor de lojas + melhoria visual da conciliação
 
 - Adicionada área de conciliação de nomes na aba Conciliação.
 - Permite vincular produto da planilha/XML/PDF a produto oficial do cadastro.

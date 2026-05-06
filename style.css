@@ -649,6 +649,98 @@ body{letter-spacing:.01em}
   padding:10px 12px;
 }
 .compact-grid{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+
+.reconciliation-shell{
+  border-color:rgba(55,196,90,.18);
+  background:
+    radial-gradient(circle at 12% 8%,rgba(83,235,111,.13),transparent 28%),
+    linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.015)),
+    var(--surface);
+}
+.reconciliation-hero{
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);
+  gap:16px;
+  align-items:start;
+  margin-bottom:18px;
+}
+.reconciliation-hero-main h2{
+  margin:8px 0 10px;
+  font-size:clamp(1.35rem,2.3vw,2rem);
+  letter-spacing:-.03em;
+}
+.reconciliation-hero-main p{
+  margin:0;
+  color:#c7d6cf;
+  line-height:1.55;
+  max-width:880px;
+}
+.metric-strip{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+}
+.metric-mini{
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(6,16,21,.66);
+  border-radius:18px;
+  padding:14px 16px;
+  box-shadow:0 12px 28px rgba(0,0,0,.14);
+}
+.metric-mini span{
+  display:block;
+  color:var(--muted);
+  font-size:.78rem;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  margin-bottom:5px;
+}
+.metric-mini strong{
+  display:block;
+  font-size:1.7rem;
+  line-height:1;
+  margin-bottom:4px;
+}
+.metric-mini small{color:#c2d0ca}
+.reconciliation-form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:16px;
+}
+.reconciliation-form-card{
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(8,20,26,.62);
+  border-radius:20px;
+  padding:18px;
+  box-shadow:0 14px 30px rgba(0,0,0,.14);
+}
+.reconciliation-form-card h4{margin:6px 0 6px;font-size:1.1rem}
+.section-tag{
+  display:inline-flex;
+  align-items:center;
+  border:1px solid rgba(55,196,90,.32);
+  background:rgba(55,196,90,.10);
+  color:#b8ffc2;
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:.76rem;
+  font-weight:800;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+}
+.section-subtitle{margin:0 0 14px;color:#c5d2cc;line-height:1.5}
+.table-shell{padding-top:14px}
+.table-headline{margin-bottom:10px}
+.compact-table table thead th{white-space:nowrap}
+.compact-table table tbody td{vertical-align:top}
+.enterprise-helper{
+  border:1px solid rgba(55,196,90,.14);
+  background:rgba(55,196,90,.08);
+}
+@media(max-width:1080px){
+  .reconciliation-hero,
+  .reconciliation-form-grid{grid-template-columns:1fr}
+}
 .grid.four{grid-template-columns:repeat(4,minmax(180px,1fr))}
 .dashboard-hero{
   display:grid;
