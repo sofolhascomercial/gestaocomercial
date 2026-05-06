@@ -1143,3 +1143,16 @@ body.store-user .view-root{background:linear-gradient(180deg,#0a1319,#081117);}
   .bulk-actions-bar .btn{width:100%;}
   .bulk-actions-bar .inline-check{width:100%;}
 }
+
+/* v64 - Conciliação direta na tabela de lojas pendentes */
+.inline-reconciliation-select{
+  min-width:260px;
+  max-width:100%;
+  width:100%;
+}
+.compact-table td .btn + .btn{
+  margin-left:6px;
+}
+@media(max-width:900px){
+  .inline-reconciliation-select{min-width:180px;}
+}

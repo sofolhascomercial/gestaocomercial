@@ -551,3 +551,10 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Salvar conciliação de loja aplica somente nos registros com o mesmo nome recebido, evitando reprocessar a base inteira.
 - Salvar conciliação de produto também passou a aplicar somente o nome conciliado.
 - Remoção de conciliação não dispara mais reprocessamento pesado da base.
+
+
+## Versão v64 - Conciliação direta na tabela de lojas pendentes
+- A tabela "Lojas pendentes para conciliar" agora mostra a coluna "Loja correta no cadastro" com um seletor em cada linha.
+- O ADM pode selecionar a loja correta e salvar a conciliação diretamente na própria linha, sem depender do formulário superior.
+- Mantida a conciliação seletiva: ao salvar, o sistema corrige apenas os registros com o mesmo nome recebido, reduzindo travamentos em bases grandes.
+- O botão "Abrir" foi mantido como opção alternativa para abrir o modal detalhado.

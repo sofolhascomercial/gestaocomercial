@@ -6799,6 +6799,14 @@
     return `<option value="">Selecionar loja...</option>${options}`;
   }
 
+
+  function reconciliationInlineId(key){
+    const text = String(key || '');
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    return `alias-store-inline-${Math.abs(hash).toString(36)}`;
+  }
+
   function importIssueProductRaw(issue){
     const text = String(issue?.detail || '');
     if (!/Produto não reconhecido/i.test(`${issue?.message || ''} ${text}`)) return '';
@@ -7031,6 +7039,15 @@
     await saveStoreNameReconciliationByValues($('#aliasStoreModalRaw')?.value || '', $('#aliasStoreModalTarget')?.value || '', $('#aliasStoreModalRede')?.value || '');
   }
 
+
+  async function saveStoreNameReconciliationInline(rawName, redeHint, inlineKey){
+    const fieldId = reconciliationInlineId(inlineKey || storeAliasKeyFromRaw(rawName, redeHint || ''));
+    const select = document.getElementById(fieldId);
+    const targetId = select?.value || '';
+    if (!targetId) return toast('Selecione a loja correta nesta linha antes de salvar.', 'warn');
+    await saveStoreNameReconciliationByValues(rawName, targetId, redeHint || '');
+  }
+
   async function deleteNameReconciliation(type, key){
     const recs = nameReconciliationStore();
     const map = type === 'store' ? recs.stores : recs.products;
@@ -7140,8 +7157,12 @@
         <div class="card table-shell">
           <div class="panel-head table-headline"><div><h3>Lojas pendentes para conciliar</h3><p class="muted">Lojas vindas com código, abreviação ou variação de grafia.</p></div><span class="badge amber">${fmt.format(storePendencies.length)}</span></div>
           <div class="table-wrap compact-table">
-            <table><thead><tr><th>Nome recebido</th><th>Rede</th><th>Origem</th><th class="num">Registros</th><th></th></tr></thead><tbody>
-            ${storePendencies.map(g=>`<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Conciliar</button></td></tr>`).join('') || `<tr><td colspan="5" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
+            <table><thead><tr><th>Nome recebido</th><th>Rede</th><th>Origem</th><th class="num">Registros</th><th>Loja correta no cadastro</th><th>Ação</th></tr></thead><tbody>
+            ${storePendencies.map(g=>{
+              const rowId = reconciliationInlineId(g.key);
+              const guess = guessStoreForReconciliation(g.rawName, g.rede || '');
+              return `<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><select id="${escapeHtml(rowId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select><div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Selecione a loja correta para este nome.'}</div></td><td><button class="btn btn-sm btn-primary" type="button" onclick="App.saveStoreNameReconciliationInline(${jsArg(g.rawName)}, ${jsArg(g.rede || '')}, ${jsArg(g.key)})">Salvar</button><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Abrir</button></td></tr>`;
+            }).join('') || `<tr><td colspan="6" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
             </tbody></table>
           </div>
         </div>
@@ -8686,7 +8707,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=63');
+        worker = new Worker('sales-worker.js?v=64');
       } catch(e) {
         return reject(e);
       }
@@ -9238,7 +9259,7 @@
   }
 
   window.App = {
-    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
