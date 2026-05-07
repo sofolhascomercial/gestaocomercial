@@ -6838,6 +6838,31 @@
     ].join('|');
   }
 
+  function applyKnownStoreOverridesToSales(){
+    const sales = Store.data?.sales || [];
+    if (!Array.isArray(sales) || !sales.length) return 0;
+    const stores = allKnownStoresForSelection();
+    let changed = 0;
+    for (const row of sales) {
+      if (row.storeId) continue;
+      const raw = row.storeRaw || row.storeName || '';
+      if (!raw) continue;
+      const rede = row.rede || '';
+      const store = storeOverrideByKnownSalesName(raw, rede, stores);
+      if (!store?.id) continue;
+      const targetName = store.nome || store.nomeSistema || store.name || store.id;
+      row.storeId = store.id;
+      row.storeName = targetName;
+      if (store.rede) row.rede = store.rede;
+      changed++;
+    }
+    if (changed) {
+      state.reconciliationCache = null;
+      Store.queueSave({}, 1200);
+    }
+    return changed;
+  }
+
   function buildReconciliationAliasCache(){
     const signature = reconciliationCacheSignature();
     if (state.reconciliationCache?.signature === signature) return state.reconciliationCache;
@@ -6862,6 +6887,8 @@
       if (!key) return;
       const manual = resolveManualStoreAlias(raw, rede, Store.data.stores || []);
       if (manual) return;
+      const known = storeOverrideByKnownSalesName(raw, rede, allKnownStoresForSelection());
+      if (known) return;
       if (!storeMap.has(key)) storeMap.set(key, {key, rawName:String(raw || '').trim(), rede:rede || '', source:new Set(), products:new Set(), records:0, qty:0, dates:new Set()});
       const g = storeMap.get(key);
       g.source.add(source || '');
@@ -7137,6 +7164,7 @@
   }
 
   function renderNameReconciliationPanel(){
+    const autoResolvedStores = applyKnownStoreOverridesToSales();
     const productPendencies = pendingProductAliasGroups().slice(0,120);
     const storePendencies = pendingStoreAliasGroups().slice(0,120);
     const productAliases = reconciliationRows('product');
@@ -7154,7 +7182,7 @@
           <div class="metric-strip">
             <div class="metric-mini"><span>Pendências</span><strong>${fmt.format(pendingCount)}</strong><small>nomes aguardando conciliação</small></div>
             <div class="metric-mini"><span>Regras ativas</span><strong>${fmt.format(manualCount)}</strong><small>atalhos já aprendidos pelo sistema</small></div>
-            <div class="metric-mini"><span>Lojas carregadas</span><strong>${fmt.format(allKnownStoresForSelection().length)}</strong><small>disponíveis para seleção</small></div>
+            <div class="metric-mini"><span>Lojas carregadas</span><strong>${fmt.format(allKnownStoresForSelection().length)}</strong><small>${autoResolvedStores ? `${fmt.format(autoResolvedStores)} corrigida(s) automaticamente` : 'disponíveis para seleção'}</small></div>
           </div>
         </div>
         <div class="reconciliation-form-grid">

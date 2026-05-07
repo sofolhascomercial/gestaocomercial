@@ -564,3 +564,9 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - A conciliação na própria linha agora lê o select da loja correta e executa a ação sem depender apenas de onclick inline.
 - Aplicação da conciliação de loja feita em lotes para evitar travamento em base grande.
 - Mantido HTML/CSS/JavaScript puro e estrutura geral preservada.
+
+
+## Versão v67 - Auto correção de lojas por alias conhecido
+- Corrige automaticamente pendências de loja quando o sistema já conhece o alias seguro.
+- Remove da lista de conciliação nomes como Guará II, Avenida Rio Verde, Jardim Botânico, SIA, 013-UNIEURO e demais aliases mapeados.
+- Mantém a opção de conciliação manual apenas para nomes realmente desconhecidos.
