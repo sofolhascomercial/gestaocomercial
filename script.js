@@ -4211,32 +4211,42 @@
     const totalSuggested = sum(rows.map(r=>r.suggestedOrder));
     const totalAdjusted = sum(rows.map(r=>r.adjustedOrder));
     const rowsWithHistory = rows.filter(r=>r.salesCalc.daysWithSales > 0).length;
-    const rowsAttention = rows.filter(r=>r.alertLevel !== 'green').length;
+    const rowsAttention = rows.filter(r=>r.alerts.length > 0).length;
+    const selectedRede = f.rede || 'Todas as redes';
+    const selectedStore = f.loja ? (storeById(f.loja)?.nome || 'Loja não encontrada') : 'Todas as lojas';
+    const baseDatesHtml = (conf.baseDates||[]).length
+      ? (conf.baseDates||[]).map(d=>`<span class="badge gray">${formatDate(d)}</span>`).join(' ')
+      : '<span class="badge amber">Nenhuma data base selecionada</span>';
     $('#viewRoot').innerHTML = `
       ${pedidoAnalysisFiltersHtml(orderDate, type)}
-      <div class="card order-analysis-hero">
-        <div>
+      <div class="card order-analysis-hero compact-order-hero">
+        <div class="order-analysis-meta">
           <span class="eyebrow">Análise para pedido</span>
           <h3>Entrega ${formatDate(orderDate)} • ${productTypeName(type)}</h3>
-          <p class="muted">Base usada: ${(conf.baseDates||[]).map(formatDate).join(', ') || 'nenhuma data selecionada na conciliação'} • Aumento: ${toNumber(conf.increasePct)}%</p>
+          <div class="order-analysis-lines">
+            <div class="order-analysis-line"><span class="label">Rede</span><strong>${escapeHtml(selectedRede)}</strong></div>
+            <div class="order-analysis-line"><span class="label">Loja</span><strong>${escapeHtml(selectedStore)}</strong></div>
+            <div class="order-analysis-line"><span class="label">Datas base</span><div class="value badges-inline">${baseDatesHtml}</div></div>
+            <div class="order-analysis-line"><span class="label">Aumento aplicado</span><strong>${toNumber(conf.increasePct)}%</strong></div>
+          </div>
         </div>
         <div class="actions">
           <button class="btn btn-soft" type="button" onclick="App.go('conciliacao')">Ajustar base de venda</button>
         </div>
       </div>
       <div class="grid kpis">
-        ${kpi('▤','Itens analisados',fmt.format(rows.length),'loja + produto')}
+        ${kpi('▤','Itens analisados',fmt.format(rows.length),'produto(s) para revisar')}
         ${kpi('◷','Com histórico',fmt.format(rowsWithHistory),'com venda nas datas base')}
-        ${kpi('▥','Estoque bom',fmt.format(sum(rows.map(r=>r.stockGood))),'último inventário')}
-        ${kpi('↥','Pedido sugerido',fmt.format(totalSuggested),'sem quebra no cálculo','green')}
-        ${kpi('✎','Pedido ajustado',fmt.format(totalAdjusted),'informado pelo comercial')}
-        ${kpi('!','Alertas',fmt.format(rowsAttention),'itens para revisar',rowsAttention?'amber':'')}
+        ${kpi('▥','Estoque bom',fmt.format(sum(rows.map(r=>r.stockGood))),'inventário do promotor - quebra')}
+        ${kpi('↥','Sugestão',fmt.format(totalSuggested),'média com acréscimo','green')}
+        ${kpi('✎','Pedido promotor',fmt.format(totalAdjusted),'pedido informado pelo promotor')}
+        ${kpi('!','Alertas',fmt.format(rowsAttention),'ofertas na base ou entrega',rowsAttention?'amber':'')}
       </div>
       <div class="card" style="margin-top:14px">
         <div class="panel-head">
           <div>
             <h3>Análise por produto</h3>
-            <p class="muted small">A quebra não entra neste cálculo. Ela deve ser tratada no módulo próprio de quebra/fechamento.</p>
+            <p class="muted small">A tabela mostra somente os campos da análise do pedido: produto, datas base, média, sugestão, entrega do dia, estoque bom, pedido do promotor e alertas.</p>
           </div>
           <span class="badge blue">${fmt.format(rows.length)} linha(s)</span>
         </div>
@@ -4250,16 +4260,18 @@
     const f = state.filters;
     const redes = getRedeOptions();
     const storesFiltered = getStoresByFilter(f);
+    const conf = Store.data.conciliation[type] || {increasePct:0};
     return `
       <div class="filter-toggle-row">
         <button class="btn btn-ghost" id="pedidoToggle">☰ Filtros</button>
-        <span class="muted small">Escolha a data de entrega, rede, loja e tipo de produto para montar o pedido.</span>
+        <span class="muted small">Escolha a rede, a loja, a data de entrega, o tipo e a porcentagem de aumento da sugestão.</span>
       </div>
       <div class="filter-row collapsible-filters ${state.filterPanelsOpen.pedido ? '' : 'hidden'}" id="pedidoPanel">
         <div class="filter">Rede <select id="pedidoRede">${redes.map(r=>`<option value="${escapeHtml(r)}" ${f.rede===r?'selected':''}>${escapeHtml(r||'Todas as redes')}</option>`).join('')}</select></div>
         <div class="filter">Loja <select id="pedidoLoja"><option value="" ${!f.loja?'selected':''}>Todas as lojas</option>${storesFiltered.map(st=>`<option value="${escapeHtml(st.id)}" ${f.loja===st.id?'selected':''}>${escapeHtml(st.nome)}</option>`).join('')}</select></div>
         <div class="filter">Data de entrega <input type="date" id="pedidoData" value="${escapeHtml(orderDate)}"></div>
         <div class="filter">Tipo <select id="pedidoTipo"><option value="FOLHAGEM" ${type==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${type==='BANDEJA'?'selected':''}>Bandejas</option></select></div>
+        <div class="filter">Aumento (%) <input type="number" id="pedidoIncreasePct" min="0" step="1" value="${toNumber(conf.increasePct)}"></div>
         <button class="btn btn-primary" id="pedidoApply">Aplicar análise</button>
       </div>`;
   }
@@ -4284,12 +4296,14 @@
     $('#pedidoApply')?.addEventListener('click', ()=>{
       const nextType = $('#pedidoTipo')?.value || type;
       const nextDate = $('#pedidoData')?.value || orderDate;
+      const nextIncreasePct = toNumber($('#pedidoIncreasePct')?.value || 0);
       state.filters.tipo = nextType;
       state.adminType = nextType;
       state.filters.dateFrom = nextDate;
       state.filters.dateTo = nextDate;
       Store.data.conciliation[nextType] ||= {baseDates:[], pendingDates:[], orderDate:nextDate, increasePct:0};
       Store.data.conciliation[nextType].orderDate = nextDate;
+      Store.data.conciliation[nextType].increasePct = nextIncreasePct;
       state.filterPanelsOpen.pedido = true;
       Store.queueSave({}, 900);
       render();
@@ -4301,32 +4315,29 @@
     const baseDates = unique(conf.baseDates || []).sort();
     const rows = [];
     for (const store of stores) {
-      const criticalIds = new Set(criticalRuptureProductIds(store.rede));
       for (const product of getStoreProducts(store.id, type)) {
         const salesCalc = salesAverageCalc(store.id, product.id, baseDates, conf.increasePct);
         const baseSuggestion = salesCalc.suggestion;
-        const latestDeliveryDate = latestDeliveryDateForProduct(store.id, product.id, orderDate);
-        const latestDeliveryQty = latestDeliveryDate ? sumDeliveryQty(store.id, product.id, [latestDeliveryDate]) : 0;
-        const latestInv = latestInventoryOutRecord(store.id, product.id, orderDate);
-        const stockGood = toNumber(latestInv?.stockCurrent || 0);
-        const offer = getActiveOfferForStore(store.id, product.id, orderDate);
+        const deliveryTodayQty = sumDeliveryQty(store.id, product.id, [orderDate]);
         const existingOrder = (Store.data.orders || []).find(o => o.storeId === store.id && o.type === type && o.date === orderDate);
         const existingLine = existingOrder?.lines?.[product.id] || null;
+        const latestInv = latestInventoryOutRecord(store.id, product.id, orderDate);
+        const stockGood = existingLine
+          ? getLineInventoryGood(existingLine)
+          : toNumber(latestInv?.stockCurrent || 0);
         const suggestedOrder = Math.max(0, Math.ceil(baseSuggestion - stockGood));
         const adjustedOrder = existingLine && existingLine.suggestion !== undefined ? toNumber(existingLine.suggestion) : suggestedOrder;
+        const hasOfferOnBase = baseDates.some(date => !!getActiveOfferForStore(store.id, product.id, date));
+        const hasOfferOnDelivery = !!getActiveOfferForStore(store.id, product.id, orderDate);
         const alerts = [];
-        let alertLevel = 'green';
-        if (!salesCalc.daysWithSales) { alerts.push('Sem histórico nas datas base'); alertLevel = 'amber'; }
-        if (!latestDeliveryDate) { alerts.push('Sem entrega recente'); alertLevel = alertLevel === 'green' ? 'amber' : alertLevel; }
-        if (offer) { alerts.push('Oferta ativa'); alertLevel = 'amber'; }
-        if (criticalIds.has(product.id)) alerts.push('Item obrigatório');
-        if (stockGood >= baseSuggestion && baseSuggestion > 0) { alerts.push('Estoque cobre a média'); alertLevel = 'amber'; }
-        if (stockGood <= 0 && baseSuggestion > 0) { alerts.push('Sem estoque bom informado'); alertLevel = 'red'; }
+        if (hasOfferOnBase) alerts.push('Oferta em uma ou mais datas base');
+        if (hasOfferOnDelivery) alerts.push('Oferta ativa na data da entrega');
         rows.push({
           key:`${store.id}|${product.id}|${type}|${orderDate}`,
           store, product, type, orderDate, baseDates, salesCalc, baseSuggestion,
-          latestDeliveryDate, latestDeliveryQty, latestInv, stockGood, offer,
-          suggestedOrder, adjustedOrder, existingOrder, existingLine, alerts, alertLevel
+          deliveryTodayQty, latestInv, stockGood,
+          suggestedOrder, adjustedOrder, existingOrder, existingLine,
+          hasOfferOnBase, hasOfferOnDelivery, alerts
         });
       }
     }
@@ -4338,31 +4349,27 @@
   }
 
   function renderPedidoAnalysisTable(rows){
-    return `<div class="table-wrap pedido-analysis-table-wrap"><table class="pedido-analysis-table"><thead><tr>
-      <th>Rede</th><th>Loja</th><th>Produto</th><th>Datas base</th><th class="num">Média</th><th class="num">Sugestão média</th><th class="num">Última entrega</th><th class="num">Estoque bom</th><th class="num">Pedido sugerido</th><th class="num">Pedido ajustado</th><th>Alertas</th><th>Obs.</th>
+    return `<div class="table-wrap pedido-analysis-table-wrap"><table class="pedido-analysis-table compact"><thead><tr>
+      <th>Produto</th><th>Datas base</th><th class="num">Média</th><th class="num">Sugestão</th><th class="num">Entrega hoje</th><th class="num">Estoque bom</th><th class="num">Pedido promotor</th><th>Alertas</th>
     </tr></thead><tbody>
       ${rows.map(r=>{
         const baseHtml = r.salesCalc.detail.length
           ? r.salesCalc.detail.map(d=>`<span class="badge ${d.qty>0?'gray':'amber'}">${formatDate(d.date)}: ${fmt.format(d.qty)}</span>`).join(' ')
           : '<span class="badge amber">Base não selecionada</span>';
         const alertHtml = r.alerts.length
-          ? r.alerts.map(a=>`<span class="badge ${r.alertLevel==='red'?'red':'amber'}">${escapeHtml(a)}</span>`).join(' ')
-          : '<span class="badge green">OK</span>';
-        return `<tr class="${r.alertLevel==='red'?'warning-row':''}">
-          <td>${escapeHtml(r.store.rede || '')}</td>
-          <td><strong>${escapeHtml(r.store.nome || '')}</strong></td>
-          <td><div class="product-cell"><span class="prod-dot"></span><strong>${escapeHtml(r.product.nomeSistema)}</strong></div>${renderOfferNotice(r.offer)}</td>
+          ? r.alerts.map(a=>`<span class="badge amber">${escapeHtml(a)}</span>`).join(' ')
+          : '<span class="badge green">Sem alertas</span>';
+        return `<tr>
+          <td><div class="product-cell"><span class="prod-dot"></span><strong>${escapeHtml(r.product.nomeSistema)}</strong></div></td>
           <td class="base-date-cell">${baseHtml}<br><span class="muted small">${r.salesCalc.daysWithSales}/${Math.max(1,r.salesCalc.selectedCount)} dia(s) com venda</span></td>
           <td class="num">${r.salesCalc.daysWithSales ? fmt.format(Math.ceil(r.salesCalc.average)) : '—'}</td>
-          <td class="num">${fmt.format(r.baseSuggestion)}</td>
-          <td class="num">${r.latestDeliveryDate ? `${fmt.format(r.latestDeliveryQty)}<br><span class="muted small">${formatDate(r.latestDeliveryDate)}</span>` : '—'}</td>
-          <td class="num">${r.latestInv ? fmt.format(r.stockGood) : '—'}</td>
-          <td class="num"><strong>${fmt.format(r.suggestedOrder)}</strong></td>
+          <td class="num"><strong>${fmt.format(r.baseSuggestion)}</strong></td>
+          <td class="num">${fmt.format(r.deliveryTodayQty)}</td>
+          <td class="num">${r.existingLine || r.latestInv ? fmt.format(r.stockGood) : '—'}</td>
           <td class="num"><input class="input-xs pedido-adjust-input" type="number" min="0" data-pedido-adjust="1" data-store-id="${escapeHtml(r.store.id)}" data-product-id="${escapeHtml(r.product.id)}" data-type="${escapeHtml(r.type)}" data-date="${escapeHtml(r.orderDate)}" value="${toNumber(r.adjustedOrder)}"></td>
           <td>${alertHtml}</td>
-          <td><input class="pedido-note-input" data-pedido-note="1" data-store-id="${escapeHtml(r.store.id)}" data-product-id="${escapeHtml(r.product.id)}" data-type="${escapeHtml(r.type)}" data-date="${escapeHtml(r.orderDate)}" value="${escapeHtml(r.existingLine?.commercialNote || '')}" placeholder="Observação..."></td>
         </tr>`;
-      }).join('') || `<tr><td colspan="12" class="center muted">Sem produtos para o filtro selecionado.</td></tr>`}
+      }).join('') || `<tr><td colspan="8" class="center muted">Sem produtos para o filtro selecionado.</td></tr>`}
     </tbody></table></div>`;
   }
 
