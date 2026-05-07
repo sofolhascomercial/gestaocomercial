@@ -7530,7 +7530,7 @@
             <select id="deliveryConcType"><option value="FOLHAGEM" ${currentType==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${currentType==='BANDEJA'?'selected':''}>Bandejas</option></select>
           </label>
           <label>Entrega
-            <select id="deliveryConcDate">${deliveryDates.map(d=>`<option value="${escapeHtml(d)}" ${d===selectedDelivery?'selected':''}>${formatDate(d)}</option>`).join('')}</select>
+            <input type="date" id="deliveryConcDate" value="${escapeHtml(selectedDelivery || todayISO())}">
           </label>
           <label>Rede
             <select id="deliveryConcRede">${redes.map(r=>`<option value="${escapeHtml(r)}" ${r===selectedRede?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
