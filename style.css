@@ -1258,3 +1258,28 @@ tr:hover td{background:rgba(53,195,91,.06)}
   .btn{width:auto}
   .inline-reconciliation-select{min-width:180px}
 }
+
+
+/* v68 - filtros completos e selects legíveis no tema escuro */
+select{
+  color-scheme: dark;
+  background-color:#0a141a;
+  color:#f4fbf5;
+}
+select:focus{
+  background-color:#0a141a;
+  color:#ffffff;
+}
+select option,
+select optgroup{
+  background:#0a141a;
+  color:#f4fbf5;
+}
+select option:checked{
+  background:#1b8f3b;
+  color:#ffffff;
+}
+select option:hover{
+  background:#13232c;
+  color:#ffffff;
+}

@@ -570,3 +570,8 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Corrige automaticamente pendências de loja quando o sistema já conhece o alias seguro.
 - Remove da lista de conciliação nomes como Guará II, Avenida Rio Verde, Jardim Botânico, SIA, 013-UNIEURO e demais aliases mapeados.
 - Mantém a opção de conciliação manual apenas para nomes realmente desconhecidos.
+
+
+## Versão v68 - Filtros completos e selects legíveis
+- Filtros administrativos de Rede/Loja agora usam a lista robusta de lojas, juntando Firebase, cadastro padrão e fallback por CNPJ.
+- Corrigido CSS de selects/options para evitar dropdown branco ilegível no tema escuro.

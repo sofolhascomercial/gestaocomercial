@@ -4005,11 +4005,21 @@
   }
 
 
+  function storesForGlobalFilters(){
+    try {
+      if (typeof allKnownStoresForSelection === 'function') return allKnownStoresForSelection();
+    } catch(_) {}
+    return Store.data?.stores || [];
+  }
   function getRedeOptions(){
-    return ['', ...unique(Store.data.stores.map(s=>s.rede))];
+    const stores = storesForGlobalFilters();
+    return ['', ...unique(stores.map(s=>s.rede).filter(Boolean)).sort((a,b)=>String(a).localeCompare(String(b),'pt-BR'))];
   }
   function getStoresByFilter(f=state.filters){
-    return Store.data.stores.filter(st => !f.rede || st.rede === f.rede);
+    const stores = storesForGlobalFilters();
+    const nRede = normalize(f?.rede || '');
+    return stores.filter(st => !nRede || normalize(st.rede || '') === nRede)
+      .sort((a,b)=>String(a.nome || '').localeCompare(String(b.nome || ''),'pt-BR'));
   }
   function adminFiltersHtml(idPrefix='filter', extra=''){
     const f = state.filters;
@@ -8778,7 +8788,7 @@
       if (!window.Worker) return reject(new Error('Web Worker indisponível'));
       let worker;
       try {
-        worker = new Worker('sales-worker.js?v=65');
+        worker = new Worker('sales-worker.js?v=68');
       } catch(e) {
         return reject(e);
       }
