@@ -2035,9 +2035,9 @@
     {rede:'DIA A DIA', id:'dd_aguas_lindas', patterns:['AGUAS LINDAS']},
     {rede:'DIA A DIA', id:'dd_gama', patterns:['GAMA DF']},
     {rede:'DIA A DIA', id:'dd_sobradinho', patterns:['SOBRADINHO']},
-    {rede:'DIA A DIA', id:'dd_rio_verde', patterns:['GOIANIA RIO VERDE','DIA A DIA RIO VERDE']},
+    {rede:'DIA A DIA', id:'dd_rio_verde', patterns:['GOIANIA RIO VERDE','DIA A DIA RIO VERDE','AVENIDA RIO VERDE','AV RIO VERDE','RIO VERDE GO']},
     {rede:'DIA A DIA', id:'dd_planaltina_df', patterns:['PLANALTINA DF']},
-    {rede:'DIA A DIA', id:'dd_guara', patterns:['GUARA II','GUARA']},
+    {rede:'DIA A DIA', id:'dd_guara', patterns:['GUARA II (DF)','GUARA II','GUARA 2','GUARA']},
     {rede:'DIA A DIA', id:'dd_mestre_d_armas', patterns:['MESTRE D ARMAS','MESTRE DARMAS']},
     {rede:'DIA A DIA', id:'dd_samambaia', patterns:['SAMAMBAIA DF','SAMAMBAIA']},
     {rede:'DIA A DIA', id:'dd_gurupi', patterns:['GURUPI']},
@@ -7028,7 +7028,7 @@
     const affected = applySingleProductNameReconciliation(rawName, product);
     const removed = clearProductIssuesByRaw(rawName);
     state.reconciliationCache = null;
-    Store.queueSave({}, 900);
+    await Store.save();
     toast(`Produto conciliado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
     render();
   }
@@ -7056,7 +7056,7 @@
     const affected = await applySingleStoreNameReconciliationAsync(rawName, normalizedStore, effectiveRede);
     const removed = clearStoreIssuesByRaw(rawName, effectiveRede);
     state.reconciliationCache = null;
-    Store.queueSave({}, 900);
+    await Store.save();
     toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
     if (options.closeModal !== false) closeModal();
     if (options.render !== false) render();
@@ -7148,8 +7148,8 @@
         <div class="reconciliation-hero">
           <div class="reconciliation-hero-main">
             <span class="eyebrow">Padronização inteligente</span>
-            <h2>Conciliação de nomes da planilha/XML/PDF</h2>
-            <p>Use esta central para padronizar nomes divergentes de loja e produto. Ao conciliar uma vez, o sistema reaproveita a regra nas próximas importações e também corrige registros já carregados na base.</p>
+            <h2>Central de conciliação de nomes</h2>
+            <p>Padronize nomes divergentes de loja e produto. Cada conciliação salva vira uma regra automática para as próximas importações e também corrige a base já carregada.</p>
           </div>
           <div class="metric-strip">
             <div class="metric-mini"><span>Pendências</span><strong>${fmt.format(pendingCount)}</strong><small>nomes aguardando conciliação</small></div>
@@ -7161,25 +7161,25 @@
           <section class="reconciliation-form-card">
             <div class="section-tag">Produto</div>
             <h4>Conciliar produto</h4>
-            <p class="section-subtitle">Quando o nome vier com marca, código ou grafia diferente, selecione o produto oficial uma única vez.</p>
+            <p class="section-subtitle">Use quando o nome do produto vier com marca, código ou grafia diferente do cadastro.</p>
             <div class="form-grid compact-grid">
               <label>Nome do produto na planilha/XML/PDF<input id="aliasProductRaw" placeholder="Ex.: BROCOLIS SÓ FOLHAS AMERICANO"></label>
               <label>Produto correto no cadastro<select id="aliasProductTarget">${productSelectOptionsHtml()}</select></label>
             </div>
             <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveProductNameReconciliation()">Salvar conciliação do produto</button></div>
-            <p class="muted small">Exemplo: BROCOLIS SÓ FOLHAS AMERICANO → BRÓCOLIS AMERICANO.</p>
+            <p class="muted small conciliation-example">Exemplo: BROCOLIS SÓ FOLHAS AMERICANO → BRÓCOLIS AMERICANO.</p>
           </section>
           <section class="reconciliation-form-card">
             <div class="section-tag">Loja</div>
             <h4>Conciliar loja</h4>
-            <p class="section-subtitle">Use quando a base vier com código, abreviação ou nome diferente da loja cadastrada.</p>
+            <p class="section-subtitle">Use quando a base vier com código, abreviação ou nome diferente da loja oficial cadastrada.</p>
             <div class="form-grid compact-grid">
               <label>Nome da loja na planilha/XML/PDF<input id="aliasStoreRaw" placeholder="Ex.: 005-VALPARSO"></label>
               <label>Loja correta no cadastro<select id="aliasStoreTarget">${storeSelectOptionsHtml()}</select></label>
               <input type="hidden" id="aliasStoreRedeHint" value="">
             </div>
             <div class="footer-actions"><button class="btn btn-primary" type="button" onclick="App.saveStoreNameReconciliation()">Salvar conciliação da loja</button></div>
-            <p class="muted small">Exemplo: 005-VALPARSO → COSTA VALPARAISO.</p>
+            <p class="muted small conciliation-example">Exemplo: 005-VALPARSO → COSTA VALPARAÍSO.</p>
           </section>
         </div>
       </div>
@@ -7199,7 +7199,7 @@
             ${storePendencies.map(g=>{
               const rowId = reconciliationInlineId(g.key);
               const guess = guessStoreForReconciliation(g.rawName, g.rede || '');
-              return `<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><select id="${escapeHtml(rowId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select><div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Selecione a loja correta para este nome.'}</div></td><td><button class="btn btn-sm btn-primary js-inline-store-save" type="button" data-raw="${escapeHtml(g.rawName)}" data-rede="${escapeHtml(g.rede || '')}" data-inline-key="${escapeHtml(g.key)}">Salvar</button><button class="btn btn-sm btn-soft" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Abrir</button></td></tr>`;
+              return `<tr><td><strong>${escapeHtml(g.rawName)}</strong></td><td>${escapeHtml(g.rede || '—')}</td><td>${Array.from(g.source).map(escapeHtml).join(', ')}</td><td class="num">${fmt.format(g.records)}</td><td><select id="${escapeHtml(rowId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select><div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Selecione a loja correta para este nome.'}</div></td><td><button class="btn btn-sm btn-primary js-inline-store-save" type="button" data-raw="${escapeHtml(g.rawName)}" data-rede="${escapeHtml(g.rede || '')}" data-inline-key="${escapeHtml(g.key)}">Salvar</button><button class="btn btn-sm btn-ghost" type="button" onclick="App.fillStoreReconciliation(${jsArg(g.rawName)}, ${jsArg(g.rede || '')})">Detalhar</button></td></tr>`;
             }).join('') || `<tr><td colspan="6" class="center muted">Sem loja pendente de conciliação.</td></tr>`}
             </tbody></table>
           </div>
@@ -7226,7 +7226,7 @@
   }
 
   function renderConciliation(){
-    setTitle('Conciliação da Base de Venda', 'Concilie nomes, padronize a leitura das importações e configure as datas comparativas da sugestão comercial.');
+    setTitle('Conciliação da Base de Venda', 'Padronize nomes e ajuste a base usada pelo cálculo da sugestão comercial.');
     const allDates = unique((Store.data.sales || []).map(s=>s.date)).sort();
     const dateOptionsHtml = (selected=[], color='green') => allDates.map(d => `<label class="badge ${selected?.includes(d)?color:'gray'}"><input type="checkbox" data-conc-type="__TYPE__" data-conc-field="__FIELD__" value="${d}" ${selected?.includes(d)?'checked':''}> ${formatDate(d)}</label>`).join('');
     const sections = ['FOLHAGEM','BANDEJA'].map(type=>{
@@ -7251,13 +7251,13 @@
     }).join('');
     $('#viewRoot').innerHTML = `
       ${renderNameReconciliationPanel()}
-      <div class="card">
-        <div class="panel-head table-headline"><div><h3>Como a sugestão será calculada</h3><p class="muted">Fluxo de cálculo usado pelo sistema para transformar histórico de venda em sugestão comercial.</p></div></div>
-        <div class="grid kpis">
-          ${kpi('1','Seleciona datas', allDates.length ? fmt.format(allDates.length) : '0', 'datas disponíveis na base')}
-          ${kpi('2','Média real', 'dias com venda', 'sem considerar data zerada')}
-          ${kpi('3','Acréscimo', '% informado', 'aplicado após a média')}
-          ${kpi('4','Arredondamento', 'para cima', 'sempre número inteiro')}
+      <div class="card compact-info-card">
+        <div class="panel-head table-headline"><div><h3>Regra da sugestão comercial</h3><p class="muted">O sistema calcula a média dos dias com venda, aplica o percentual informado e arredonda para cima.</p></div><span class="badge blue">${allDates.length ? fmt.format(allDates.length) : '0'} datas</span></div>
+        <div class="pillbar compact-flow">
+          <span class="badge gray">1. Seleciona datas</span>
+          <span class="badge gray">2. Calcula média real</span>
+          <span class="badge gray">3. Aplica acréscimo</span>
+          <span class="badge gray">4. Arredonda para cima</span>
         </div>
       </div>
       <div class="grid two">${sections}</div>
