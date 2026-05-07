@@ -1283,3 +1283,33 @@ select option:hover{
   background:#13232c;
   color:#ffffff;
 }
+
+
+/* v69 - Aba Pedidos / análise comercial de pedido */
+.order-analysis-hero{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:14px;
+  border-color:rgba(53,195,91,.18);
+  background:
+    radial-gradient(circle at 10% 0%,rgba(53,195,91,.13),transparent 28%),
+    linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015)),
+    var(--surface);
+}
+.order-analysis-hero h3{font-size:1.35rem;margin:8px 0 6px;letter-spacing:-.02em;}
+.pedido-analysis-table-wrap{max-height:66vh;}
+.pedido-analysis-table{min-width:1500px;}
+.pedido-analysis-table th{white-space:nowrap;}
+.pedido-analysis-table td{vertical-align:top;}
+.base-date-cell{min-width:230px;}
+.base-date-cell .badge{margin:2px 3px 2px 0;}
+.pedido-adjust-input{min-width:88px;text-align:right;}
+.pedido-note-input{min-width:180px;}
+.pedido-analysis-table .product-cell{min-width:250px;}
+.pedido-analysis-table .offer-notice{margin-top:8px;}
+@media(max-width:900px){
+  .order-analysis-hero{display:grid;}
+  .pedido-analysis-table{min-width:1200px;}
+}

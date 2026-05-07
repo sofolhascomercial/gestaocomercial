@@ -575,3 +575,9 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 ## Versão v68 - Filtros completos e selects legíveis
 - Filtros administrativos de Rede/Loja agora usam a lista robusta de lojas, juntando Firebase, cadastro padrão e fallback por CNPJ.
 - Corrigido CSS de selects/options para evitar dropdown branco ilegível no tema escuro.
+
+
+## Versão v69 - Aba Pedidos Inteligentes
+- Aba Pedidos/Análise de Pedidos passa a montar o pedido usando datas da Conciliação da Base de Venda.
+- Mostra base de venda, média, sugestão pela média, última entrega, estoque bom atual, pedido sugerido, pedido ajustado, ofertas e item obrigatório.
+- Quebra não entra no cálculo desta aba; permanece para módulo próprio.
