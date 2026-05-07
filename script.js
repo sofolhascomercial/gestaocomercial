@@ -1871,7 +1871,13 @@
   }
 
   function productById(id){ return Store.data.products.find(p=>p.id===id); }
-  function storeById(id){ return Store.data.stores.find(s=>s.id===id); }
+  function storeById(id){
+    if (!id) return null;
+    return (Store.data?.stores || []).find(s=>s.id===id)
+      || (window.DEFAULT_STORES || []).find(s=>s.id===id)
+      || (typeof allKnownStoresForSelection === 'function' ? allKnownStoresForSelection().find(s=>s.id===id) : null)
+      || null;
+  }
   function activeProducts(type=null){
     return Store.data.products.filter(p => p.situacao === 'ATIVO' && (!type || p.tipo === type));
   }
@@ -4198,27 +4204,92 @@
     bindAdminFilters('dash');
   }
 
+  function ensureDeliveryConciliationStore(){
+    Store.data ||= Store.seed();
+    Store.data.deliveryConciliations ||= { FOLHAGEM:{}, BANDEJA:{} };
+    Store.data.deliveryConciliations.FOLHAGEM ||= {};
+    Store.data.deliveryConciliations.BANDEJA ||= {};
+    return Store.data.deliveryConciliations;
+  }
+
+  function deliveryConciliationRecord(type, orderDate, rede, {create=false}={}){
+    if (!type || !orderDate || !rede) return null;
+    const root = ensureDeliveryConciliationStore();
+    root[type] ||= {};
+    root[type][orderDate] ||= {};
+    if (!root[type][orderDate][rede] && create) {
+      root[type][orderDate][rede] = {baseDates:[], increasePct:toNumber(Store.data.conciliation?.[type]?.increasePct || 0), updatedAt:'', user:''};
+    }
+    return root[type][orderDate][rede] || null;
+  }
+
+  function orderAnalysisConciliation(type, orderDate, rede=''){
+    const legacy = Store.data.conciliation?.[type] || {baseDates:[], pendingDates:[], orderDate:orderDate || todayISO(), increasePct:0};
+    const direct = rede ? deliveryConciliationRecord(type, orderDate, rede) : null;
+    if (direct && Array.isArray(direct.baseDates) && direct.baseDates.length) {
+      return {baseDates:direct.baseDates || [], increasePct:toNumber(direct.increasePct), orderDate, rede};
+    }
+    if (!rede) return {baseDates:legacy.baseDates || [], increasePct:toNumber(legacy.increasePct), orderDate:orderDate || legacy.orderDate || todayISO(), rede:''};
+    return {baseDates:legacy.baseDates || [], increasePct:toNumber(legacy.increasePct), orderDate:orderDate || legacy.orderDate || todayISO(), rede};
+  }
+
+  function setDeliveryConciliation(type, orderDate, rede, baseDates=[], increasePct=0){
+    const rec = deliveryConciliationRecord(type, orderDate, rede, {create:true});
+    if (!rec) return null;
+    rec.baseDates = unique(baseDates || []).sort();
+    rec.increasePct = Math.max(0, toNumber(increasePct));
+    rec.updatedAt = new Date().toISOString();
+    rec.user = state.session?.usuario || 'sistema';
+    Store.data.conciliation[type] ||= {baseDates:[], pendingDates:[], orderDate, increasePct:0};
+    Store.data.conciliation[type].orderDate = orderDate;
+    Store.data.conciliation[type].baseDates = [...rec.baseDates];
+    Store.data.conciliation[type].increasePct = rec.increasePct;
+    return rec;
+  }
+
+  function availableDeliveryDatesForConciliation(){
+    const root = ensureDeliveryConciliationStore();
+    const fromPlans = ['FOLHAGEM','BANDEJA'].flatMap(type => Object.keys(root[type] || {}));
+    const fromDeliveries = unique((Store.data.deliveries || []).map(d=>d.date));
+    const fromOrders = unique((Store.data.orders || []).map(o=>o.date));
+    const fromLegacy = ['FOLHAGEM','BANDEJA'].map(type => Store.data.conciliation?.[type]?.orderDate).filter(Boolean);
+    return unique([...fromPlans, ...fromDeliveries, ...fromOrders, ...fromLegacy, todayISO()]).sort();
+  }
+
+  function redesForDeliveryConciliation(){
+    const salesRedes = unique((Store.data.sales || []).map(r=>r.rede).filter(Boolean));
+    if (salesRedes.length) return salesRedes.sort((a,b)=>String(a).localeCompare(String(b),'pt-BR'));
+    return getRedeOptions().filter(Boolean);
+  }
+
+  function deliveryConciliationSummary(type, orderDate){
+    const redes = redesForDeliveryConciliation();
+    const done = redes.filter(rede => (deliveryConciliationRecord(type, orderDate, rede)?.baseDates || []).length > 0);
+    return {type, orderDate, redes, done, pending:redes.filter(r=>!done.includes(r)), total:redes.length};
+  }
+
   function renderOrderAnalysis(){
     setTitle('Pedidos', 'Análise comercial para montar o pedido usando base de venda, estoque bom e última entrega.');
     const f = state.filters;
     if (!f.tipo || f.tipo === 'AMBOS') f.tipo = state.adminType && state.adminType !== 'AMBOS' ? state.adminType : 'FOLHAGEM';
     if (!['FOLHAGEM','BANDEJA'].includes(f.tipo)) f.tipo = 'FOLHAGEM';
     const type = f.tipo;
-    const conf = Store.data.conciliation[type] || {baseDates:[], orderDate:todayISO(), increasePct:0};
-    const orderDate = f.dateFrom || conf.orderDate || todayISO();
+    const legacy = Store.data.conciliation[type] || {baseDates:[], orderDate:todayISO(), increasePct:0};
+    const orderDate = f.dateFrom || legacy.orderDate || todayISO();
     const stores = getStoresByFilter(f).filter(st=>!f.loja || st.id===f.loja);
+    const displayConc = orderAnalysisConciliation(type, orderDate, f.rede || stores[0]?.rede || '');
     const rows = buildPedidoAnalysisRows(stores, type, orderDate);
-    const totalSuggested = sum(rows.map(r=>r.suggestedOrder));
-    const totalAdjusted = sum(rows.map(r=>r.adjustedOrder));
+    const totalSuggested = sum(rows.map(r=>r.baseSuggestion));
+    const totalPromoter = sum(rows.map(r=>r.promoterOrder));
     const rowsWithHistory = rows.filter(r=>r.salesCalc.daysWithSales > 0).length;
     const rowsAttention = rows.filter(r=>r.alerts.length > 0).length;
     const selectedRede = f.rede || 'Todas as redes';
     const selectedStore = f.loja ? (storeById(f.loja)?.nome || 'Loja não encontrada') : 'Todas as lojas';
-    const baseDatesHtml = (conf.baseDates||[]).length
-      ? (conf.baseDates||[]).map(d=>`<span class="badge gray">${formatDate(d)}</span>`).join(' ')
+    const baseDatesHtml = (displayConc.baseDates||[]).length
+      ? (displayConc.baseDates||[]).map(d=>`<span class="badge gray">${formatDate(d)}</span>`).join(' ')
       : '<span class="badge amber">Nenhuma data base selecionada</span>';
     $('#viewRoot').innerHTML = `
-      ${pedidoAnalysisFiltersHtml(orderDate, type)}
+      ${pedidoAnalysisFiltersHtml(orderDate, type, displayConc)}
       <div class="card order-analysis-hero compact-order-hero">
         <div class="order-analysis-meta">
           <span class="eyebrow">Análise para pedido</span>
@@ -4227,7 +4298,7 @@
             <div class="order-analysis-line"><span class="label">Rede</span><strong>${escapeHtml(selectedRede)}</strong></div>
             <div class="order-analysis-line"><span class="label">Loja</span><strong>${escapeHtml(selectedStore)}</strong></div>
             <div class="order-analysis-line"><span class="label">Datas base</span><div class="value badges-inline">${baseDatesHtml}</div></div>
-            <div class="order-analysis-line"><span class="label">Aumento aplicado</span><strong>${toNumber(conf.increasePct)}%</strong></div>
+            <div class="order-analysis-line"><span class="label">Aumento aplicado</span><strong>${toNumber(displayConc.increasePct)}%</strong></div>
           </div>
         </div>
         <div class="actions">
@@ -4239,7 +4310,7 @@
         ${kpi('◷','Com histórico',fmt.format(rowsWithHistory),'com venda nas datas base')}
         ${kpi('▥','Estoque bom',fmt.format(sum(rows.map(r=>r.stockGood))),'inventário do promotor - quebra')}
         ${kpi('↥','Sugestão',fmt.format(totalSuggested),'média com acréscimo','green')}
-        ${kpi('✎','Pedido promotor',fmt.format(totalAdjusted),'pedido informado pelo promotor')}
+        ${kpi('✎','Pedido promotor',fmt.format(totalPromoter),'pedido enviado pela loja')}
         ${kpi('!','Alertas',fmt.format(rowsAttention),'ofertas na base ou entrega',rowsAttention?'amber':'')}
       </div>
       <div class="card" style="margin-top:14px">
@@ -4252,15 +4323,15 @@
         </div>
         ${renderPedidoAnalysisTable(rows)}
       </div>`;
-    bindPedidoAnalysisFilters(orderDate, type);
+    bindPedidoAnalysisFilters(orderDate, type, displayConc);
     bindPedidoAnalysisInputs(rows, orderDate, type);
   }
 
-  function pedidoAnalysisFiltersHtml(orderDate, type){
+  function pedidoAnalysisFiltersHtml(orderDate, type, displayConc=null){
     const f = state.filters;
     const redes = getRedeOptions();
     const storesFiltered = getStoresByFilter(f);
-    const conf = Store.data.conciliation[type] || {increasePct:0};
+    const conf = displayConc || orderAnalysisConciliation(type, orderDate, f.rede || '');
     return `
       <div class="filter-toggle-row">
         <button class="btn btn-ghost" id="pedidoToggle">☰ Filtros</button>
@@ -4304,6 +4375,10 @@
       Store.data.conciliation[nextType] ||= {baseDates:[], pendingDates:[], orderDate:nextDate, increasePct:0};
       Store.data.conciliation[nextType].orderDate = nextDate;
       Store.data.conciliation[nextType].increasePct = nextIncreasePct;
+      if (state.filters.rede) {
+        const currentBase = orderAnalysisConciliation(nextType, nextDate, state.filters.rede).baseDates || [];
+        setDeliveryConciliation(nextType, nextDate, state.filters.rede, currentBase, nextIncreasePct);
+      }
       state.filterPanelsOpen.pedido = true;
       Store.queueSave({}, 900);
       render();
@@ -4311,10 +4386,10 @@
   }
 
   function buildPedidoAnalysisRows(stores, type, orderDate){
-    const conf = Store.data.conciliation[type] || {baseDates:[], increasePct:0};
-    const baseDates = unique(conf.baseDates || []).sort();
     const rows = [];
     for (const store of stores) {
+      const conf = orderAnalysisConciliation(type, orderDate, store.rede || '');
+      const baseDates = unique(conf.baseDates || []).sort();
       for (const product of getStoreProducts(store.id, type)) {
         const salesCalc = salesAverageCalc(store.id, product.id, baseDates, conf.increasePct);
         const baseSuggestion = salesCalc.suggestion;
@@ -4322,11 +4397,8 @@
         const existingOrder = (Store.data.orders || []).find(o => o.storeId === store.id && o.type === type && o.date === orderDate);
         const existingLine = existingOrder?.lines?.[product.id] || null;
         const latestInv = latestInventoryOutRecord(store.id, product.id, orderDate);
-        const stockGood = existingLine
-          ? getLineInventoryGood(existingLine)
-          : toNumber(latestInv?.stockCurrent || 0);
-        const suggestedOrder = Math.max(0, Math.ceil(baseSuggestion - stockGood));
-        const adjustedOrder = existingLine && existingLine.suggestion !== undefined ? toNumber(existingLine.suggestion) : suggestedOrder;
+        const stockGood = existingLine ? getLineInventoryGood(existingLine) : toNumber(latestInv?.stockCurrent || 0);
+        const promoterOrder = existingLine && existingLine.suggestion !== undefined ? toNumber(existingLine.suggestion) : 0;
         const hasOfferOnBase = baseDates.some(date => !!getActiveOfferForStore(store.id, product.id, date));
         const hasOfferOnDelivery = !!getActiveOfferForStore(store.id, product.id, orderDate);
         const alerts = [];
@@ -4335,9 +4407,8 @@
         rows.push({
           key:`${store.id}|${product.id}|${type}|${orderDate}`,
           store, product, type, orderDate, baseDates, salesCalc, baseSuggestion,
-          deliveryTodayQty, latestInv, stockGood,
-          suggestedOrder, adjustedOrder, existingOrder, existingLine,
-          hasOfferOnBase, hasOfferOnDelivery, alerts
+          deliveryTodayQty, latestInv, stockGood, promoterOrder,
+          existingOrder, existingLine, hasOfferOnBase, hasOfferOnDelivery, alerts
         });
       }
     }
@@ -4354,19 +4425,19 @@
     </tr></thead><tbody>
       ${rows.map(r=>{
         const baseHtml = r.salesCalc.detail.length
-          ? r.salesCalc.detail.map(d=>`<span class="badge ${d.qty>0?'gray':'amber'}">${formatDate(d.date)}: ${fmt.format(d.qty)}</span>`).join(' ')
+          ? `<div class="base-date-list">${r.salesCalc.detail.map(d=>`<span class="badge ${d.qty>0?'gray':'amber'}">${formatDate(d.date)}: ${fmt.format(d.qty)}</span>`).join('')}</div>`
           : '<span class="badge amber">Base não selecionada</span>';
         const alertHtml = r.alerts.length
           ? r.alerts.map(a=>`<span class="badge amber">${escapeHtml(a)}</span>`).join(' ')
           : '<span class="badge green">Sem alertas</span>';
         return `<tr>
           <td><div class="product-cell"><span class="prod-dot"></span><strong>${escapeHtml(r.product.nomeSistema)}</strong></div></td>
-          <td class="base-date-cell">${baseHtml}<br><span class="muted small">${r.salesCalc.daysWithSales}/${Math.max(1,r.salesCalc.selectedCount)} dia(s) com venda</span></td>
+          <td class="base-date-cell">${baseHtml}<span class="muted small">${r.salesCalc.daysWithSales}/${Math.max(1,r.salesCalc.selectedCount)} dia(s) com venda</span></td>
           <td class="num">${r.salesCalc.daysWithSales ? fmt.format(Math.ceil(r.salesCalc.average)) : '—'}</td>
           <td class="num"><strong>${fmt.format(r.baseSuggestion)}</strong></td>
           <td class="num">${fmt.format(r.deliveryTodayQty)}</td>
           <td class="num">${r.existingLine || r.latestInv ? fmt.format(r.stockGood) : '—'}</td>
-          <td class="num"><input class="input-xs pedido-adjust-input" type="number" min="0" data-pedido-adjust="1" data-store-id="${escapeHtml(r.store.id)}" data-product-id="${escapeHtml(r.product.id)}" data-type="${escapeHtml(r.type)}" data-date="${escapeHtml(r.orderDate)}" value="${toNumber(r.adjustedOrder)}"></td>
+          <td class="num"><span class="pedido-promoter-value">${fmt.format(r.promoterOrder || 0)}</span></td>
           <td>${alertHtml}</td>
         </tr>`;
       }).join('') || `<tr><td colspan="8" class="center muted">Sem produtos para o filtro selecionado.</td></tr>`}
@@ -4407,6 +4478,24 @@
     setTitle('Sistema de Análises Comerciais', 'Dashboards e análises para performance comercial e operacional.');
     const f = state.filters;
     if (!f.tipo) f.tipo = 'AMBOS';
+    const allowedTypesForDash = selectedTypes(f.tipo || 'AMBOS');
+    const matchesDashboardDelivery = (d, ignoreDate=false) => {
+      const s = storeById(d.storeId);
+      const p = productById(d.productId);
+      return (!f.rede || s?.rede === f.rede)
+        && (!f.loja || d.storeId === f.loja)
+        && (!p || allowedTypesForDash.includes(p.tipo))
+        && (ignoreDate || dateInRange(d.date, f.dateFrom, f.dateTo));
+    };
+    const hasFilteredDeliveries = (Store.data.deliveries || []).some(d => matchesDashboardDelivery(d));
+    if (!hasFilteredDeliveries) {
+      const fallbackDates = unique((Store.data.deliveries || []).filter(d => matchesDashboardDelivery(d, true)).map(d=>d.date)).sort();
+      if (fallbackDates.length) {
+        const latest = fallbackDates[fallbackDates.length - 1];
+        f.dateFrom = latest;
+        f.dateTo = latest;
+      }
+    }
     const metrics = computeMetrics(f);
     const topQuebra = computeTopQuebra(f).slice(0,5);
     const titleStore = f.loja ? storeById(f.loja)?.nome : 'Todas as lojas';
@@ -7406,65 +7495,110 @@
   }
 
   function renderConciliation(){
-    setTitle('Conciliação da Base de Venda', 'Padronize nomes e ajuste a base usada pelo cálculo da sugestão comercial.');
-    const allDates = unique((Store.data.sales || []).map(s=>s.date)).sort();
-    const dateOptionsHtml = (selected=[], color='green') => allDates.map(d => `<label class="badge ${selected?.includes(d)?color:'gray'}"><input type="checkbox" data-conc-type="__TYPE__" data-conc-field="__FIELD__" value="${d}" ${selected?.includes(d)?'checked':''}> ${formatDate(d)}</label>`).join('');
-    const sections = ['FOLHAGEM','BANDEJA'].map(type=>{
-      const c = Store.data.conciliation[type] || {baseDates:[], pendingDates:[], orderDate:todayISO(), increasePct:0};
-      const baseDatesHtml = dateOptionsHtml(c.baseDates || [], 'green').replaceAll('__TYPE__', type).replaceAll('__FIELD__', 'baseDates');
-      const pendingDatesHtml = dateOptionsHtml(c.pendingDates || [], 'amber').replaceAll('__TYPE__', type).replaceAll('__FIELD__', 'pendingDates');
-      return `<div class="card conciliation-card">
-        <div class="panel-head table-headline"><div><h3>${type==='FOLHAGEM'?'Folhagens':'Bandejas'}</h3><p class="muted">Configure a base comparativa usada para sugestão de pedido.</p></div><span class="badge ${c.baseDates?.length?'green':'amber'}">${c.baseDates?.length?'Base pronta':'Pendente'}</span></div>
-        <div class="form-grid compact">
-          <label>Data de entrega<input type="date" data-conc-type="${type}" data-conc-field="orderDate" value="${c.orderDate||todayISO()}"></label>
-          <label>% aumento da sugestão<input type="number" step="0.01" min="0" data-conc-type="${type}" data-conc-field="increasePct" value="${toNumber(c.increasePct)}" placeholder="Ex.: 25"></label>
-        </div>
-        <div class="helper-box enterprise-helper">
-          <strong>Regra aplicada:</strong> o sistema soma somente os dias com venda, divide pela quantidade de dias com venda, aplica o percentual de aumento e arredonda para cima.
-        </div>
-        <hr>
-        <strong>Datas para média da venda base</strong>
-        <div class="pillbar date-pillbar" style="margin-top:8px">${baseDatesHtml || '<span class="muted">Importe uma base de venda primeiro.</span>'}</div>
-        <p class="muted small">Selecionadas: ${(c.baseDates||[]).length} data(s). Dias sem venda do produto não entram na divisão.</p>
-        ${type==='BANDEJA'?`<hr><strong>Venda pendente até a próxima entrega</strong><div class="pillbar date-pillbar" style="margin-top:8px">${pendingDatesHtml || '<span class="muted">Importe uma base de venda primeiro.</span>'}</div>`:''}
+    setTitle('Conciliação da Base de Venda', 'Defina a data de entrega e escolha quais datas de venda serão usadas como base.');
+    const allBaseDates = unique((Store.data.sales || []).map(s=>s.date)).sort();
+    const deliveryDates = availableDeliveryDatesForConciliation();
+    const redes = redesForDeliveryConciliation();
+    const currentType = ['FOLHAGEM','BANDEJA'].includes(state.filters.tipo) ? state.filters.tipo : (state.adminType && state.adminType !== 'AMBOS' ? state.adminType : 'FOLHAGEM');
+    const selectedDelivery = state.filters.dateFrom || Store.data.conciliation?.[currentType]?.orderDate || deliveryDates[deliveryDates.length-1] || todayISO();
+    const selectedRede = state.filters.rede || redes[0] || '';
+    const selectedPlan = orderAnalysisConciliation(currentType, selectedDelivery, selectedRede);
+    const baseChecks = allBaseDates.map(d => `<label class="inline-check conciliation-date-option"><input type="checkbox" data-conc-base-date="${escapeHtml(d)}" ${selectedPlan.baseDates?.includes(d)?'checked':''}> <span>${formatDate(d)}</span></label>`).join('');
+    const summaries = deliveryDates.slice().reverse().slice(0,90).map(date => {
+      const byType = ['FOLHAGEM','BANDEJA'].map(type => deliveryConciliationSummary(type, date));
+      const totalDone = byType.reduce((a,s)=>a+s.done.length,0);
+      const total = byType.reduce((a,s)=>a+s.total,0);
+      const badges = byType.map(s => `<span class="badge ${s.done.length===s.total && s.total ? 'green' : s.done.length ? 'amber' : 'gray'}">${typeLabelShort(s.type)}: ${s.done.length}/${s.total || 0}</span>`).join(' ');
+      return `<div class="conciliation-calendar-day">
+        <strong>${formatDate(date)}</strong>
+        <span class="muted small">Conciliações: ${totalDone}/${total || 0}</span>
+        <div class="pillbar">${badges}</div>
       </div>`;
     }).join('');
     $('#viewRoot').innerHTML = `
       ${renderNameReconciliationPanel()}
-      <div class="card compact-info-card">
-        <div class="panel-head table-headline"><div><h3>Regra da sugestão comercial</h3><p class="muted">O sistema calcula a média dos dias com venda, aplica o percentual informado e arredonda para cima.</p></div><span class="badge blue">${allDates.length ? fmt.format(allDates.length) : '0'} datas</span></div>
-        <div class="pillbar compact-flow">
-          <span class="badge gray">1. Seleciona datas</span>
-          <span class="badge gray">2. Calcula média real</span>
-          <span class="badge gray">3. Aplica acréscimo</span>
-          <span class="badge gray">4. Arredonda para cima</span>
+      <div class="card conciliation-workflow-card">
+        <div class="panel-head">
+          <div>
+            <h3>Configurar base por data de entrega</h3>
+            <p class="muted small">Escolha a entrega, a rede e selecione múltiplas datas base. Você pode marcar, desmarcar e trocar as datas sempre que necessário.</p>
+          </div>
+          <span class="badge blue">${fmt.format(allBaseDates.length)} datas base</span>
+        </div>
+        <div class="form-grid compact">
+          <label>Tipo
+            <select id="deliveryConcType"><option value="FOLHAGEM" ${currentType==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${currentType==='BANDEJA'?'selected':''}>Bandejas</option></select>
+          </label>
+          <label>Entrega
+            <select id="deliveryConcDate">${deliveryDates.map(d=>`<option value="${escapeHtml(d)}" ${d===selectedDelivery?'selected':''}>${formatDate(d)}</option>`).join('')}</select>
+          </label>
+          <label>Rede
+            <select id="deliveryConcRede">${redes.map(r=>`<option value="${escapeHtml(r)}" ${r===selectedRede?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select>
+          </label>
+          <label>Aumento (%)
+            <input type="number" min="0" step="1" id="deliveryConcIncrease" value="${toNumber(selectedPlan.increasePct)}">
+          </label>
+        </div>
+        <hr>
+        <strong>Base de venda</strong>
+        <div class="conciliation-base-list">${baseChecks || '<span class="muted">Importe uma base de vendas para liberar as datas base.</span>'}</div>
+        <div class="footer-actions">
+          <button class="btn btn-soft" type="button" id="clearDeliveryConcBase">Limpar seleção</button>
+          <button class="btn btn-primary" type="button" id="saveDeliveryConc">Salvar conciliação da entrega</button>
         </div>
       </div>
-      <div class="grid two">${sections}</div>
-      <div class="footer-actions"><button class="btn btn-primary" id="saveConc">Salvar conciliação</button></div>`;
-    $$('#viewRoot input[data-conc-type]').forEach(inp=>{
-      const handler = ()=>{
-        const type = inp.dataset.concType;
-        const field = inp.dataset.concField;
-        Store.data.conciliation[type] ||= {baseDates:[], pendingDates:[], orderDate:todayISO(), increasePct:0};
-        if (field === 'orderDate') Store.data.conciliation[type].orderDate = inp.value;
-        else if (field === 'increasePct') Store.data.conciliation[type].increasePct = Math.max(0, toNumber(inp.value));
-        else {
-          const arr = new Set(Store.data.conciliation[type][field] || []);
-          inp.checked ? arr.add(inp.value) : arr.delete(inp.value);
-          Store.data.conciliation[type][field] = Array.from(arr).sort();
-        }
-        Store.queueSave({}, 900);
-      };
-      inp.addEventListener(inp.type === 'number' ? 'input' : 'change', handler);
-    });
-    $('#saveConc').addEventListener('click', ()=>Store.save().then(()=>toast('Conciliação salva.')));
+      <div class="card conciliation-calendar-card">
+        <div class="panel-head">
+          <div><h3>Calendário de conciliações por entrega</h3><p class="muted small">A data abaixo é a data de entrega. O resumo mostra quantas redes já têm base de venda definida para cada entrega.</p></div>
+        </div>
+        <div class="conciliation-calendar-grid">${summaries || '<div class="empty">Nenhuma entrega encontrada para montar o calendário.</div>'}</div>
+      </div>`;
+    bindDeliveryConciliationControls(currentType, selectedDelivery, selectedRede);
     $$('.js-inline-store-save').forEach(btn => {
       btn.addEventListener('click', async () => {
         await saveStoreNameReconciliationInline(btn.dataset.raw || '', btn.dataset.rede || '', btn.dataset.inlineKey || '', btn);
       });
     });
   }
+
+  function typeLabelShort(type){ return type === 'BANDEJA' ? 'Bandejas' : 'Folhagens'; }
+
+  function bindDeliveryConciliationControls(currentType, selectedDelivery, selectedRede){
+    const rerender = () => {
+      state.filters.tipo = $('#deliveryConcType')?.value || currentType;
+      state.adminType = state.filters.tipo;
+      state.filters.dateFrom = $('#deliveryConcDate')?.value || selectedDelivery;
+      state.filters.dateTo = state.filters.dateFrom;
+      state.filters.rede = $('#deliveryConcRede')?.value || selectedRede;
+      renderConciliation();
+    };
+    $('#deliveryConcType')?.addEventListener('change', rerender);
+    $('#deliveryConcDate')?.addEventListener('change', rerender);
+    $('#deliveryConcRede')?.addEventListener('change', rerender);
+    $('#clearDeliveryConcBase')?.addEventListener('click', () => {
+      $$('[data-conc-base-date]').forEach(chk => chk.checked = false);
+    });
+    $('#saveDeliveryConc')?.addEventListener('click', async () => {
+      const type = $('#deliveryConcType')?.value || currentType;
+      const orderDate = $('#deliveryConcDate')?.value || selectedDelivery;
+      const rede = $('#deliveryConcRede')?.value || selectedRede;
+      const pct = toNumber($('#deliveryConcIncrease')?.value || 0);
+      const baseDates = $$('[data-conc-base-date]').filter(chk => chk.checked).map(chk => chk.dataset.concBaseDate);
+      if (!orderDate) return toast('Selecione a data de entrega.', 'warn');
+      if (!rede) return toast('Selecione a rede.', 'warn');
+      if (!baseDates.length) return toast('Selecione pelo menos uma data base.', 'warn');
+      setDeliveryConciliation(type, orderDate, rede, baseDates, pct);
+      state.filters.tipo = type;
+      state.adminType = type;
+      state.filters.dateFrom = orderDate;
+      state.filters.dateTo = orderDate;
+      state.filters.rede = rede;
+      await Store.save();
+      toast(`Conciliação salva para ${formatDate(orderDate)} • ${rede}.`);
+      renderConciliation();
+    });
+  }
+
   function renderMissingQuality(){
     setTitle('Faltas e Qualidade', 'Lançamento exclusivo do ADM/comercial. Abate entrega e calcula valor pelo custo do PDF.');
     const dates = unique(Store.data.deliveries.map(d=>d.date)).sort().reverse();
@@ -8505,15 +8639,23 @@
     return total;
   }
   function computeTopQuebra(f={}){
-    return Store.data.stores.map(store=>{
+    return storesForGlobalFilters().map(store=>{
       const ff={...f, loja:store.id};
       return {store, quebra:computeBreakageValue(ff), venda:Store.data.deliveries.filter(d=>d.storeId===store.id && dateInRange(d.date,f.dateFrom,f.dateTo)).reduce((a,d)=>a+validValue(d),0)};
     }).filter(r=>r.quebra>0).sort((a,b)=>b.quebra-a.quebra);
   }
 
   function renderSimpleChart(f={}){
-    const dates = unique(Store.data.deliveries.filter(d=>dateInRange(d.date,f.dateFrom,f.dateTo)).map(d=>d.date)).sort().slice(-7);
-    if (!dates.length) return `<div class="empty">Importe PDFs para alimentar Venda x Quebra.</div>`;
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    const dates = unique((Store.data.deliveries || []).filter(d=>{
+      const s = storeById(d.storeId);
+      const p = productById(d.productId);
+      return (!f.rede || s?.rede === f.rede)
+        && (!f.loja || d.storeId === f.loja)
+        && (!p || allowedTypes.includes(p.tipo))
+        && dateInRange(d.date,f.dateFrom,f.dateTo);
+    }).map(d=>d.date)).sort().slice(-7);
+    if (!dates.length) return `<div class="empty">Não há XML/PDF importado para os filtros atuais.</div>`;
     const values = dates.map(date=>{
       const ff={...f,dateFrom:date,dateTo:date};
       const m=computeMetrics(ff);

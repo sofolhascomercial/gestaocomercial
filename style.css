@@ -1322,3 +1322,45 @@ select option:hover{
   .order-analysis-line{grid-template-columns:1fr;gap:6px;}
   .pedido-analysis-table{min-width:980px;}
 }
+
+/* v71 - ajustes pontuais Pedidos, Conciliação e Dashboard */
+.base-date-list{display:grid;gap:6px;align-items:start;justify-items:start;margin-bottom:7px;}
+.base-date-list .badge{display:inline-flex;width:max-content;margin:0;}
+.pedido-promoter-value{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:78px;min-height:40px;padding:8px 12px;border-radius:12px;
+  background:rgba(5,14,19,.72);border:1px solid rgba(97,132,150,.35);
+  font-weight:900;color:#f5fbf7;
+}
+.conciliation-workflow-card{margin-top:14px;border-color:rgba(53,195,91,.16);}
+.conciliation-base-list{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:8px;
+  margin-top:10px;
+  max-height:260px;
+  overflow:auto;
+  padding:4px;
+}
+.conciliation-date-option{margin:0;}
+.conciliation-date-option input{accent-color:var(--green);width:16px;height:16px;}
+.conciliation-calendar-card{margin-top:14px;}
+.conciliation-calendar-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:12px;
+}
+.conciliation-calendar-day{
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.025);
+  border-radius:16px;
+  padding:13px;
+  display:grid;
+  gap:8px;
+}
+.conciliation-calendar-day strong{font-size:1.05rem;}
+.conciliation-calendar-day .pillbar{gap:6px;}
+.pedido-analysis-table.compact td{border-bottom:1px solid rgba(255,255,255,.08);}
+@media(max-width:900px){
+  .conciliation-base-list{grid-template-columns:1fr;max-height:320px;}
+}
