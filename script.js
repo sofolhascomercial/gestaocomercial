@@ -23,6 +23,7 @@
     {id:'estoque-loja', icon:'▦', label:'Estoque em Loja'},
     {id:'analises', icon:'▥', label:'Análises Comerciais'},
     {id:'analise-pedidos', icon:'▤', label:'Pedidos'},
+    {id:'resultado-pedido', icon:'◬', label:'Resultado do Pedido'},
     {id:'importar-pdf', icon:'▣', label:'Importar XML/PDF'},
     {id:'conferencia-importacao', icon:'☑', label:'Conferência de Importação'},
     {id:'duplicidades', icon:'⧉', label:'Duplicidades'},
@@ -42,7 +43,7 @@
   const NAV_GROUPS = [
     {title:'Painel', pages:['dashboard','fechamento-dia']},
     {title:'Importações', pages:['importar-pdf','conferencia-importacao','duplicidades','bases','conciliacao']},
-    {title:'Comercial', pages:['analises','analise-pedidos','ofertas','precos']},
+    {title:'Comercial', pages:['analises','analise-pedidos','resultado-pedido','ofertas','precos']},
     {title:'Operação', pages:['inventario-saida','estoque-loja','rupturas','itens-obrigatorios','faltas','pendencias','mix']},
     {title:'Atendimento', pages:['chamados']},
     {title:'Administração', pages:['usuarios','historico']}
@@ -53,7 +54,7 @@
     {title:'Atendimento', items:[['chamados','✉','Chamados']]},
     {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
-  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
+  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','resultado-pedido','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
   const DEFAULT_COMMERCIAL_USERS = [
     { usuario:'anderson.wagner', senha:'sofolhas2026', nome:'Anderson Wagner', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
     { usuario:'matheus.victor', senha:'sofolhas2026', nome:'Matheus Victor', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
@@ -3990,6 +3991,7 @@
       case 'inventario-saida': return renderInventoryOutAdmin();
       case 'estoque-loja': return renderStoreStockAdmin();
       case 'analise-pedidos': return renderOrderAnalysis();
+      case 'resultado-pedido': return renderOrderResult();
       case 'importar-pdf': return renderImportPdf();
       case 'conferencia-importacao': return renderImportAudit();
       case 'duplicidades': return renderImportDuplicates();
@@ -4472,6 +4474,194 @@
 
   function renderStoreList(rows, mode){
     return rows.length ? `<table><tbody>${rows.map(r=>`<tr><td>${r.store.nome}</td><td class="num">${mode==='excesso'?fmt.format(r.inventory-r.sale):fmt.format(r.sale-r.inventory)} und</td></tr>`).join('')}</tbody></table>` : `<div class="empty">Sem lojas nesta condição.</div>`;
+  }
+
+
+  function latestDeliveryDateForResult(){
+    const dates = unique((Store.data.deliveries || []).map(d=>d.date)).sort();
+    return dates[dates.length - 1] || todayISO();
+  }
+
+  function orderResultFiltersHtml(orderDate, type){
+    const f = state.filters;
+    const redes = getRedeOptions();
+    const storesFiltered = getStoresByFilter(f);
+    return `
+      <div class="order-result-context">
+        <div class="order-result-topline">
+          <span>▣ Entrega: <strong>${formatDate(orderDate)}</strong></span>
+          <span>•</span><span>▤ Rede: <strong>${escapeHtml(f.rede || 'Todas')}</strong></span>
+          <span>•</span><span>⌖ Loja: <strong>${escapeHtml(f.loja ? (storeById(f.loja)?.nome || 'Loja') : 'Todas')}</strong></span>
+          <span>•</span><span>☘ Tipo: <strong>${productTypeName(type)}</strong></span>
+        </div>
+        <button class="btn btn-ghost" type="button" onclick="App.exportBackup()">⇩ Exportar</button>
+      </div>
+      <div class="card order-result-filterbar">
+        <label>Data de entrega<input type="date" id="resultDate" value="${escapeHtml(orderDate)}"></label>
+        <label>Rede<select id="resultRede">${redes.map(r=>`<option value="${escapeHtml(r)}" ${f.rede===r?'selected':''}>${escapeHtml(r||'Todas as redes')}</option>`).join('')}</select></label>
+        <label>Loja<select id="resultLoja"><option value="" ${!f.loja?'selected':''}>Todas as lojas</option>${storesFiltered.map(st=>`<option value="${escapeHtml(st.id)}" ${f.loja===st.id?'selected':''}>${escapeHtml(st.nome)}</option>`).join('')}</select></label>
+        <label>Tipo<select id="resultTipo"><option value="FOLHAGEM" ${type==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${type==='BANDEJA'?'selected':''}>Bandejas</option></select></label>
+        <button class="btn btn-primary" id="resultApply">▥ Aplicar análise</button>
+      </div>`;
+  }
+
+  function bindOrderResultFilters(orderDate, type){
+    const f = state.filters;
+    function refreshStores(){
+      const loja = $('#resultLoja');
+      if (!loja) return;
+      const storesFiltered = getStoresByFilter(f);
+      loja.innerHTML = `<option value="" ${!f.loja?'selected':''}>Todas as lojas</option>` + storesFiltered.map(st=>`<option value="${escapeHtml(st.id)}" ${f.loja===st.id?'selected':''}>${escapeHtml(st.nome)}</option>`).join('');
+    }
+    $('#resultRede')?.addEventListener('change', e=>{ f.rede = e.target.value; f.loja = ''; refreshStores(); });
+    $('#resultLoja')?.addEventListener('change', e=>{ f.loja = e.target.value; });
+    $('#resultTipo')?.addEventListener('change', e=>{ f.tipo = e.target.value; state.adminType = e.target.value; });
+    $('#resultDate')?.addEventListener('change', e=>{ f.dateFrom = e.target.value || latestDeliveryDateForResult(); f.dateTo = f.dateFrom; });
+    $('#resultApply')?.addEventListener('click', ()=>{
+      const nextDate = $('#resultDate')?.value || orderDate;
+      const nextType = $('#resultTipo')?.value || type;
+      state.filters.dateFrom = nextDate;
+      state.filters.dateTo = nextDate;
+      state.filters.tipo = nextType;
+      state.adminType = nextType;
+      render();
+    });
+  }
+
+  function orderResultLineFor(store, product, type, orderDate){
+    const conf = orderAnalysisConciliation(type, orderDate, store.rede || '');
+    const salesCalc = salesAverageCalc(store.id, product.id, conf.baseDates || [], conf.increasePct || 0);
+    const systemSuggestion = toNumber(salesCalc.suggestion);
+    const order = (Store.data.orders || []).find(o => o.storeId === store.id && o.type === type && o.date === orderDate) || null;
+    const line = order?.lines?.[product.id] || null;
+    const promoterOrder = toNumber(line?.suggestion || 0);
+    const deliveryReal = sumDeliveryQty(store.id, product.id, [orderDate]);
+    const inv = latestInventoryOutRecord(store.id, product.id, orderDate) || null;
+    const stockGood = inv ? toNumber(inv.stockCurrent || 0) : 0;
+    const breakQty = toNumber(line?.quebraQty || 0);
+    const hasConference = !!(inv || breakQty > 0 || String(line?.breakNote || '').trim() || line?.breakFilledAtDate || line?.breakReferenceLabel);
+    const exitEstimated = Math.max(0, deliveryReal - stockGood - breakQty);
+    let errorEstimated = stockGood + breakQty;
+    if (hasConference && deliveryReal > 0 && stockGood <= 0 && breakQty <= 0 && systemSuggestion > deliveryReal) {
+      errorEstimated = deliveryReal - systemSuggestion;
+    }
+    const breakPct = deliveryReal > 0 ? (breakQty / deliveryReal) * 100 : 0;
+    let diagnosis = 'Pedido adequado', diagnosisClass = 'green', action = 'Manter', actionClass = 'green', actionIcon = '✓';
+    if (!hasConference) {
+      diagnosis = 'Sem conferência'; diagnosisClass = 'blue'; action = 'Aguardar lançamento'; actionClass = 'blue'; actionIcon = '▤';
+    } else if (breakPct >= 20 || (breakQty >= Math.max(5, deliveryReal * .18))) {
+      diagnosis = 'Excesso / quebra alta'; diagnosisClass = 'red'; action = 'Reduzir próxima entrega'; actionClass = 'red'; actionIcon = '↘';
+    } else if (errorEstimated < 0) {
+      diagnosis = 'Possível falta'; diagnosisClass = 'amber'; action = 'Aumentar levemente'; actionClass = 'amber'; actionIcon = '↗';
+    } else if (stockGood >= Math.max(5, deliveryReal * .25) && deliveryReal > 0) {
+      diagnosis = 'Estoque alto'; diagnosisClass = 'red'; action = 'Ajustar para baixo'; actionClass = 'red'; actionIcon = '↘';
+    }
+    return {store, product, type, orderDate, systemSuggestion, promoterOrder, deliveryReal, stockGood, breakQty, exitEstimated, errorEstimated, breakPct, hasConference, diagnosis, diagnosisClass, action, actionClass, actionIcon};
+  }
+
+  function buildOrderResultRows(orderDate, type){
+    const f = state.filters;
+    const stores = getStoresByFilter(f).filter(st => !f.loja || st.id === f.loja);
+    const rows = [];
+    stores.forEach(store => {
+      getStoreProducts(store.id, type).forEach(product => rows.push(orderResultLineFor(store, product, type, orderDate)));
+    });
+    return rows.sort((a,b)=>
+      String(a.store.nome||'').localeCompare(String(b.store.nome||''),'pt-BR') ||
+      String(a.product.nomeSistema||'').localeCompare(String(b.product.nomeSistema||''),'pt-BR')
+    );
+  }
+
+  function orderResultKpis(rows){
+    const delivered = sum(rows.map(r=>r.deliveryReal));
+    const breakTotal = sum(rows.map(r=>r.breakQty));
+    const exitTotal = sum(rows.map(r=>r.exitEstimated));
+    const excess = sum(rows.filter(r=>r.errorEstimated>0).map(r=>r.errorEstimated));
+    const noConf = rows.filter(r=>!r.hasConference).length;
+    const breakPct = delivered > 0 ? (breakTotal / delivered) * 100 : 0;
+    return {delivered, breakTotal, exitTotal, excess, noConf, breakPct};
+  }
+
+  function orderResultSummary(rows){
+    return {
+      ok: rows.filter(r=>r.diagnosis === 'Pedido adequado').length,
+      excess: rows.filter(r=>r.diagnosisClass === 'red').length,
+      risk: rows.filter(r=>r.diagnosisClass === 'amber').length,
+      noConf: rows.filter(r=>!r.hasConference).length
+    };
+  }
+
+  function orderResultLearning(rows){
+    const sorted = rows.filter(r=>r.hasConference && (r.diagnosisClass !== 'green' || Math.abs(r.errorEstimated) > 0)).sort((a,b)=>Math.abs(b.errorEstimated)-Math.abs(a.errorEstimated)).slice(0,5);
+    return sorted.map(r=>{
+      if (r.diagnosis === 'Excesso / quebra alta') return {cls:'red', title:`Reduzir ${r.product.nomeSistema} em ~${fmt.format(Math.ceil(Math.abs(r.errorEstimated)))} un`, detail:'Excesso e quebra alta identificados.'};
+      if (r.diagnosis === 'Possível falta') return {cls:'amber', title:`Aumentar ${r.product.nomeSistema} em ~${fmt.format(Math.ceil(Math.abs(r.errorEstimated)))} un`, detail:'Risco de falta identificado.'};
+      if (r.diagnosis === 'Estoque alto') return {cls:'red', title:`Ajustar ${r.product.nomeSistema} para baixo`, detail:'Estoque bom alto após a entrega.'};
+      return {cls:'green', title:`Manter ${r.product.nomeSistema}`, detail:'Pedido adequado, baixo erro.'};
+    });
+  }
+
+  function renderOrderResultTable(rows){
+    return `<div class="table-wrap order-result-table-wrap"><table class="order-result-table">
+      <thead><tr><th>Produto</th><th class="num">Sugestão sistema</th><th class="num">Pedido promotor</th><th class="num">Entrega real</th><th class="num">Estoque bom</th><th class="num">Quebra</th><th class="num">Saída estimada</th><th class="num">Erro estimado</th><th>Diagnóstico</th><th>Ação sugerida</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td><div class="product-cell"><span class="prod-dot"></span><strong>${escapeHtml(r.product.nomeSistema)}</strong></div>${state.filters.loja?'':`<span class="muted small">${escapeHtml(r.store.nome || '')}</span>`}</td>
+        <td class="num">${fmt.format(r.systemSuggestion)}</td>
+        <td class="num">${fmt.format(r.promoterOrder)}</td>
+        <td class="num">${fmt.format(r.deliveryReal)}</td>
+        <td class="num">${fmt.format(r.stockGood)}</td>
+        <td class="num">${fmt.format(r.breakQty)}</td>
+        <td class="num">${fmt.format(r.exitEstimated)}</td>
+        <td class="num ${r.errorEstimated>0?'negative':r.errorEstimated<0?'warning-text':''}">${r.errorEstimated>0?'+':''}${fmt.format(r.errorEstimated)}</td>
+        <td><span class="badge ${r.diagnosisClass}">${escapeHtml(r.diagnosis)}</span></td>
+        <td><span class="result-action-chip ${r.actionClass}">${escapeHtml(r.actionIcon)} ${escapeHtml(r.action)}</span></td>
+      </tr>`).join('') || `<tr><td colspan="10" class="center muted">Sem produtos para o filtro selecionado.</td></tr>`}</tbody>
+    </table></div>`;
+  }
+
+  function renderOrderResult(){
+    const f = state.filters;
+    if (!['FOLHAGEM','BANDEJA'].includes(f.tipo)) f.tipo = state.adminType && state.adminType !== 'AMBOS' ? state.adminType : 'FOLHAGEM';
+    const type = f.tipo;
+    const orderDate = f.dateFrom || latestDeliveryDateForResult();
+    f.dateFrom = orderDate;
+    f.dateTo = orderDate;
+    setTitle('Resultado do Pedido', 'Análise pós-entrega para entender excesso, risco de falta, quebra e acerto do pedido.');
+    const rows = buildOrderResultRows(orderDate, type);
+    const k = orderResultKpis(rows);
+    const summary = orderResultSummary(rows);
+    const learning = orderResultLearning(rows);
+    $('#viewRoot').innerHTML = `
+      ${orderResultFiltersHtml(orderDate, type)}
+      <div class="grid kpis order-result-kpis">
+        ${kpi('▣','Entregue hoje',fmt.format(k.delivered),'unidades','green')}
+        ${kpi('⚠','Quebra pós-entrega',fmt.format(k.breakTotal),'unidades','red')}
+        ${kpi('↗','Saída estimada',fmt.format(k.exitTotal),'unidades','green')}
+        ${kpi('▧','Excesso estimado','+'+fmt.format(k.excess),'unidades','amber')}
+        ${kpi('%','% quebra',k.breakPct.toFixed(2).replace('.',',')+'%','sobre entrega','purple')}
+        ${kpi('▤','Sem conferência',fmt.format(k.noConf),'itens','blue')}
+      </div>
+      <div class="order-result-layout">
+        <div class="card order-result-main-card">
+          <div class="panel-head"><div><h3>Análise por produto</h3></div></div>
+          ${renderOrderResultTable(rows)}
+          <div class="order-result-legend"><span>Legenda - Erro estimado:</span><span><i class="dot red"></i> Excesso</span><span><i class="dot amber"></i> Risco de falta</span><span><i class="dot green"></i> Adequado</span></div>
+        </div>
+        <aside class="order-result-side">
+          <div class="card order-result-side-card">
+            <h3>▥ Resumo por loja</h3>
+            <div class="result-summary-row"><span><i class="dot green"></i> Itens adequados</span><strong>${fmt.format(summary.ok)}</strong></div>
+            <div class="result-summary-row"><span><i class="dot red"></i> Itens com excesso</span><strong>${fmt.format(summary.excess)}</strong></div>
+            <div class="result-summary-row"><span><i class="dot amber"></i> Itens com risco de falta</span><strong>${fmt.format(summary.risk)}</strong></div>
+            <div class="result-summary-row"><span><i class="dot blue"></i> Sem conferência</span><strong>${fmt.format(summary.noConf)}</strong></div>
+          </div>
+          <div class="card order-result-side-card">
+            <h3>◌ Aprendizado para próxima entrega</h3>
+            ${learning.map(item=>`<div class="learning-item"><i class="dot ${item.cls}"></i><div><strong class="${item.cls==='red'?'negative':item.cls==='amber'?'warning-text':'positive'}">${escapeHtml(item.title)}</strong><span>${escapeHtml(item.detail)}</span></div></div>`).join('') || `<div class="empty">Sem aprendizado suficiente para esse filtro.</div>`}
+          </div>
+        </aside>
+      </div>`;
+    bindOrderResultFilters(orderDate, type);
   }
 
   function renderAnalytics(){
