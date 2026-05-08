@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Só Folhas | Sistema Comercial</title>
   <link rel="icon" href="logo-sofolhas-oficial.png" type="image/png" />
-  <link rel="stylesheet" href="style.css?v=73" />
+  <link rel="stylesheet" href="style.css?v=75-enterprise" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js" defer></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js" defer></script>
-  <script src="data/default-data.js?v=73" defer></script>
-  <script src="firebase-config.js?v=73" defer></script>
-  <script src="script.js?v=73" defer></script>
+  <script src="data/default-data.js?v=75-enterprise" defer></script>
+  <script src="firebase-config.js?v=75-enterprise" defer></script>
+  <script src="script.js?v=75-enterprise" defer></script>
 </head>
 <body>
   <div id="toastHost" class="toast-host"></div>
@@ -49,18 +49,20 @@
     <section class="workspace">
       <header class="topbar">
         <div>
-          <button id="sidebarToggle" class="icon-btn" aria-label="Menu">☰</button>
+          <button id="sidebarToggle" class="icon-btn menu-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
           <div>
             <h2 id="pageTitle">Sistema de Pedidos Comerciais</h2>
             <p id="pageSubtitle">Crie e acompanhe pedidos com base em vendas, entregas, inventário e quebras.</p>
           </div>
         </div>
         <div class="profile-card">
-          <button id="mobileModeBtn" class="btn btn-soft mobile-mode-btn hidden" type="button">📱 Abrir modo mobile</button>
+          <button id="mobileModeBtn" class="btn btn-soft mobile-mode-btn hidden" type="button">Abrir modo mobile</button>
+          <span class="system-chip cloud-chip">Firebase conectado</span>
+          <span class="system-chip updated-chip">Base atualizada</span>
           <span id="contextBadge" class="context-badge">Loja</span>
           <span class="avatar">●</span>
           <strong id="profileName">Usuário</strong>
-          <button class="icon-btn" id="logoutBtn" title="Sair">⎋</button>
+          <button class="icon-btn logout-icon" id="logoutBtn" title="Sair">Sair</button>
         </div>
       </header>
 
