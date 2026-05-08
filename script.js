@@ -18,6 +18,7 @@
   const ADMIN_USER = { usuario: 'gerenciacomercial', senha: 'sofolhas2026', nome: 'Administrador Comercial', role: 'admin' };
   const ADMIN_PAGES = [
     {id:'dashboard', icon:'▥', label:'Dashboard'},
+    {id:'dashboard-apresentacao', icon:'◫', label:'Dashboard Apresentação'},
     {id:'fechamento-dia', icon:'✓', label:'Fechamento do Dia'},
     {id:'inventario-saida', icon:'▨', label:'Inventário de Saída'},
     {id:'estoque-loja', icon:'▦', label:'Estoque em Loja'},
@@ -41,7 +42,7 @@
     {id:'historico', icon:'↺', label:'Histórico'}
   ];
   const NAV_GROUPS = [
-    {title:'Painel', pages:['dashboard','fechamento-dia']},
+    {title:'Painel', pages:['dashboard','dashboard-apresentacao','fechamento-dia']},
     {title:'Importações', pages:['importar-pdf','conferencia-importacao','duplicidades','bases','conciliacao']},
     {title:'Comercial', pages:['analises','analise-pedidos','resultado-pedido','ofertas','precos']},
     {title:'Operação', pages:['inventario-saida','estoque-loja','rupturas','itens-obrigatorios','faltas','pendencias','mix']},
@@ -54,7 +55,7 @@
     {title:'Atendimento', items:[['chamados','✉','Chamados']]},
     {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
-  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','resultado-pedido','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
+  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','dashboard-apresentacao','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','resultado-pedido','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
   const DEFAULT_COMMERCIAL_USERS = [
     { usuario:'anderson.wagner', senha:'sofolhas2026', nome:'Anderson Wagner', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
     { usuario:'matheus.victor', senha:'sofolhas2026', nome:'Matheus Victor', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
@@ -3987,6 +3988,7 @@
     }
     switch(state.page){
       case 'dashboard': return renderDashboard();
+      case 'dashboard-apresentacao': return renderDashboardPresentation();
       case 'fechamento-dia': return renderDayClosing();
       case 'inventario-saida': return renderInventoryOutAdmin();
       case 'estoque-loja': return renderStoreStockAdmin();
@@ -4662,6 +4664,346 @@
         </aside>
       </div>`;
     bindOrderResultFilters(orderDate, type);
+  }
+
+
+  function dashboardStockOverview(f={}){
+    const typeFilter = f.tipo && f.tipo !== 'AMBOS' ? f.tipo : '';
+    const date = f.dateTo || f.dateFrom || latestOperationalDate();
+    const rows = computeStoreStockRows({date, rede:f.rede || '', storeId:f.loja || '', type:typeFilter});
+    const grouped = new Map();
+    rows.forEach(r => {
+      if (!r?.store?.id) return;
+      const key = r.store.id;
+      if (!grouped.has(key)) grouped.set(key, {store:r.store, critical:0, low:0, high:0, noInventory:0, total:0});
+      const g = grouped.get(key);
+      g.total += 1;
+      if (r.status === 'Risco de falta') g.critical += 1;
+      if (r.status === 'Estoque baixo') g.low += 1;
+      if (r.status === 'Estoque alto') g.high += 1;
+      if (r.status === 'Sem inventário') g.noInventory += 1;
+    });
+    const stores = Array.from(grouped.values()).map(g => ({
+      ...g,
+      attention: g.critical + g.low + g.high + g.noInventory
+    })).sort((a,b) => (b.attention - a.attention) || (b.critical - a.critical) || String(a.store.nome || '').localeCompare(String(b.store.nome || ''),'pt-BR'));
+    return {
+      rows,
+      stores,
+      attentionStores: stores.filter(s => s.attention > 0).length,
+      lowStockStores: stores.filter(s => (s.critical + s.low) > 0).length,
+      excessStores: stores.filter(s => s.high > 0).length,
+      noInventoryStores: stores.filter(s => s.noInventory > 0).length
+    };
+  }
+
+  function countSavedConciliations(typeFilter='AMBOS'){
+    const root = ensureDeliveryConciliationStore();
+    const types = typeFilter === 'AMBOS' || !typeFilter ? ['FOLHAGEM','BANDEJA'] : [typeFilter];
+    const dates = new Set();
+    let redes = 0;
+    types.forEach(type => {
+      Object.entries(root[type] || {}).forEach(([date, redeMap]) => {
+        Object.values(redeMap || {}).forEach(record => {
+          if (Array.isArray(record?.baseDates) && record.baseDates.length) {
+            dates.add(date);
+            redes += 1;
+          }
+        });
+      });
+    });
+    return {dates: dates.size, redes};
+  }
+
+  function filterSalesRowsForDashboard(f={}){
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    return (Store.data.sales || []).filter(r => {
+      const store = storeById(r.storeId);
+      const product = productById(r.productId);
+      return (!f.rede || store?.rede === f.rede)
+        && (!f.loja || r.storeId === f.loja)
+        && (!product || allowedTypes.includes(product.tipo))
+        && dateInRange(r.date, f.dateFrom, f.dateTo);
+    });
+  }
+
+  function filterDeliveriesRowsForDashboard(f={}){
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    return (Store.data.deliveries || []).filter(d => {
+      const store = storeById(d.storeId);
+      const product = productById(d.productId);
+      return (!f.rede || store?.rede === f.rede)
+        && (!f.loja || d.storeId === f.loja)
+        && (!product || allowedTypes.includes(product.tipo))
+        && dateInRange(d.date, f.dateFrom, f.dateTo);
+    });
+  }
+
+  function computeDashboardHomeData(f={}){
+    const metrics = computeMetrics(f);
+    const latestDate = f.dateTo || f.dateFrom || latestOperationalDate();
+    const stock = dashboardStockOverview(f);
+    const conc = countSavedConciliations(f.tipo || 'AMBOS');
+    const openTickets = (Store.data.tickets || []).filter(t => t.status === 'ABERTO').length;
+    const activeOffers = (Store.data.offers || []).filter(o => offerIsActiveOn(o, latestDate) && (!f.rede || o.rede === f.rede)).length;
+    const importIssues = (Store.data.importIssues || []).filter(i => importIssueStillRelevant(i)).length;
+    const pendingDup = (Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length;
+    const pricePending = computePricePendingCount(latestDate);
+    const criticalPending = computeCriticalRuptureAlerts({dateFrom:f.dateFrom || '', dateTo:f.dateTo || '', rede:f.rede || '', onlyPending:true}).length;
+    const typeForResult = f.tipo === 'BANDEJA' ? 'BANDEJA' : 'FOLHAGEM';
+    const resultDate = f.dateTo || latestDeliveryDateForResult();
+    const resultRows = buildOrderResultRows(resultDate, typeForResult);
+    const resultSummary = orderResultSummary(resultRows);
+    const deliveries = filterDeliveriesRowsForDashboard(f);
+    const sales = filterSalesRowsForDashboard(f);
+    const notes = unique(deliveries.map(d => d.importGroupKey || d.orderNumber || d.id)).length;
+    const storesCovered = unique(deliveries.map(d => d.storeId).filter(Boolean)).length;
+    return {metrics, latestDate, stock, conc, openTickets, activeOffers, importIssues, pendingDup, pricePending, criticalPending, resultSummary, deliveries, sales, notes, storesCovered};
+  }
+
+  function execMetricCard(icon, title, value, detail='', tone='green'){
+    return `<div class="exec-metric-card ${tone}">
+      <div class="exec-metric-icon">${icon}</div>
+      <div class="exec-metric-text">
+        <span>${escapeHtml(title)}</span>
+        <strong>${value}</strong>
+        <small>${detail}</small>
+      </div>
+    </div>`;
+  }
+
+  function execActionCard(icon, title, value, detail, page, tone='green'){
+    return `<button class="exec-action-card ${tone}" onclick="App.go('${page}')">
+      <div class="exec-action-top"><span class="exec-action-icon">${icon}</span><strong>${value}</strong></div>
+      <h4>${escapeHtml(title)}</h4>
+      <p>${detail}</p>
+    </button>`;
+  }
+
+  function renderDashboardAttentionList(stockSummary){
+    const rows = (stockSummary?.stores || []).filter(r => r.attention > 0).slice(0, 8);
+    if (!rows.length) return `<div class="empty">Nenhuma loja com alerta relevante no filtro atual.</div>`;
+    return `<div class="exec-list">${rows.map(r => `
+      <div class="exec-list-item">
+        <div>
+          <strong>${escapeHtml(r.store.nome || '')}</strong>
+          <small>${escapeHtml(r.store.rede || '')}</small>
+        </div>
+        <div class="exec-list-badges">
+          ${r.critical ? `<span class="badge red">${fmt.format(r.critical)} crítico(s)</span>` : ''}
+          ${r.low ? `<span class="badge amber">${fmt.format(r.low)} baixo</span>` : ''}
+          ${r.high ? `<span class="badge amber">${fmt.format(r.high)} excesso</span>` : ''}
+          ${r.noInventory ? `<span class="badge gray">${fmt.format(r.noInventory)} sem inventário</span>` : ''}
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  function renderDashboardResume(data){
+    const rows = [
+      ['Conciliações salvas', `${fmt.format(data.conc.redes)} rede(s) em ${fmt.format(data.conc.dates)} data(s)`],
+      ['Notas / grupos importados', `${fmt.format(data.notes)} nota(s) / grupo(s)`],
+      ['Lojas cobertas nas entregas', `${fmt.format(data.storesCovered)} loja(s)`],
+      ['Ofertas ativas na data', `${fmt.format(data.activeOffers)} oferta(s)`],
+      ['Preços pendentes', `${fmt.format(data.pricePending)} loja(s)`],
+      ['Chamados abertos', `${fmt.format(data.openTickets)} chamado(s)`],
+      ['Duplicidades pendentes', `${fmt.format(data.pendingDup)} ocorrência(s)`],
+      ['Divergências de importação', `${fmt.format(data.importIssues)} alerta(s)`]
+    ];
+    return `<div class="exec-summary-list">${rows.map(([label,value]) => `<div class="exec-summary-row"><span>${escapeHtml(label)}</span><strong>${value}</strong></div>`).join('')}</div>`;
+  }
+
+  function renderDashboardResultSummary(data){
+    const items = [
+      ['Itens adequados', data.resultSummary.ok, 'green'],
+      ['Com excesso / quebra alta', data.resultSummary.excess, 'red'],
+      ['Com risco de falta', data.resultSummary.risk, 'amber'],
+      ['Sem conferência', data.resultSummary.noConf, 'blue']
+    ];
+    return `<div class="exec-result-grid">${items.map(([label,value,tone]) => `<div class="exec-result-box ${tone}"><span>${escapeHtml(label)}</span><strong>${fmt.format(value)}</strong></div>`).join('')}</div>`;
+  }
+
+  function renderDashboard(){
+    setTitle('Dashboard Inicial', 'Resumo executivo da operação comercial com foco em decisão rápida.');
+    const f = state.filters;
+    if (!f.tipo) f.tipo = 'AMBOS';
+    const data = computeDashboardHomeData(f);
+    const breakPct = data.metrics.vendaValida > 0 ? (data.metrics.quebra / data.metrics.vendaValida) * 100 : 0;
+    $('#viewRoot').innerHTML = `
+      <section class="dashboard-shell">
+        <div class="card exec-hero-card">
+          <div>
+            <span class="eyebrow">Visão executiva</span>
+            <h1>Dashboard inicial</h1>
+            <p>Resumo consolidado para acompanhar resultado, estoque, importações e pontos de atenção sem poluição visual.</p>
+            <div class="hero-status-row">
+              <span class="status-chip">Período: ${escapeHtml((f.dateFrom || f.dateTo) ? `${f.dateFrom ? formatDate(f.dateFrom) : 'início'} até ${f.dateTo ? formatDate(f.dateTo) : 'hoje'}` : 'geral')}</span>
+              <span class="status-chip ${data.stock.attentionStores ? 'amber' : 'green'}">${data.stock.attentionStores ? `${fmt.format(data.stock.attentionStores)} loja(s) em atenção` : 'Sem alerta crítico por loja'}</span>
+            </div>
+          </div>
+          <div class="exec-hero-actions">
+            <button class="btn btn-soft" onclick="App.go('dashboard-apresentacao')">◫ Dashboard apresentação</button>
+            <button class="btn btn-primary" onclick="App.go('analise-pedidos')">▤ Ir para pedidos</button>
+          </div>
+        </div>
+
+        <div class="card exec-filters-card">${adminFiltersHtml('dash')}</div>
+
+        <div class="exec-metric-grid">
+          ${execMetricCard('▥','Venda acumulada', money.format(data.metrics.vendaValida), 'venda válida no período', 'green')}
+          ${execMetricCard('↘','Quebra acumulada', money.format(data.metrics.quebra), `${breakPct.toFixed(2).replace('.',',')}% sobre a venda`, data.metrics.quebra ? 'red' : 'green')}
+          ${execMetricCard('⚠','Lojas em atenção', fmt.format(data.stock.attentionStores), `${fmt.format(data.stock.lowStockStores)} com estoque baixo/risco`, data.stock.attentionStores ? 'amber' : 'green')}
+          ${execMetricCard('✓','Entregas importadas', fmt.format(data.notes), `${fmt.format(data.storesCovered)} loja(s) cobertas`, 'blue')}
+        </div>
+
+        <div class="exec-action-grid">
+          ${execActionCard('✓','Fechamento do dia', data.latestDate ? formatDate(data.latestDate) : '—', 'Conferir rotina operacional da data.', 'fechamento-dia', 'green')}
+          ${execActionCard('◈','Conciliação', fmt.format(data.conc.redes), 'Redes com base de venda já conciliada.', 'conciliacao', data.conc.redes ? 'blue' : 'amber')}
+          ${execActionCard('🏷','Ofertas e preços', fmt.format(data.activeOffers + data.pricePending), `${fmt.format(data.activeOffers)} oferta(s) e ${fmt.format(data.pricePending)} preço(s) pendente(s).`, 'ofertas', (data.activeOffers || data.pricePending) ? 'amber' : 'green')}
+          ${execActionCard('✉','Chamados / divergências', fmt.format(data.openTickets + data.importIssues + data.pendingDup), 'Chamados, divergências e duplicidades para tratar.', 'chamados', (data.openTickets || data.importIssues || data.pendingDup) ? 'amber' : 'green')}
+        </div>
+
+        <div class="exec-panel-grid">
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Lojas com maior atenção</h3><p class="muted small">Baseado no estoque em loja e no inventário já lançado.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('estoque-loja')">Ver estoque</button></div>
+            ${renderDashboardAttentionList(data.stock)}
+          </div>
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Resultado do pedido</h3><p class="muted small">Resumo consolidado do módulo de resultado do pedido.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('resultado-pedido')">Abrir módulo</button></div>
+            ${renderDashboardResultSummary(data)}
+          </div>
+        </div>
+
+        <div class="exec-panel-grid">
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Resumo operacional</h3><p class="muted small">Indicadores auxiliares para tomada de decisão.</p></div></div>
+            ${renderDashboardResume(data)}
+          </div>
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Atalhos rápidos</h3><p class="muted small">Acesse direto as áreas mais usadas do sistema.</p></div></div>
+            <div class="exec-shortcuts">
+              <button class="btn btn-soft" onclick="App.go('importar-pdf')">▣ Importar XML/PDF</button>
+              <button class="btn btn-soft" onclick="App.go('bases')">▤ Base de vendas</button>
+              <button class="btn btn-soft" onclick="App.go('analise-pedidos')">▤ Pedidos</button>
+              <button class="btn btn-soft" onclick="App.go('resultado-pedido')">◬ Resultado do pedido</button>
+              <button class="btn btn-soft" onclick="App.go('rupturas')">⚠ Rupturas</button>
+              <button class="btn btn-soft" onclick="App.go('historico')">↺ Histórico</button>
+            </div>
+          </div>
+        </div>
+      </section>`;
+    bindAdminFilters('dash');
+  }
+
+  function computePresentationProductStats(f={}){
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    const salesMap = new Map();
+    filterSalesRowsForDashboard(f).forEach(r => {
+      const product = productById(r.productId);
+      if (!product || !allowedTypes.includes(product.tipo)) return;
+      if (!salesMap.has(product.id)) salesMap.set(product.id, {product, salesQty:0, breakQty:0, breakValue:0});
+      const row = salesMap.get(product.id);
+      row.salesQty += toNumber(r.qty);
+    });
+    (Store.data.orders || []).forEach(order => {
+      const store = storeById(order.storeId);
+      if (!store) return;
+      if (f.rede && store.rede !== f.rede) return;
+      if (f.loja && order.storeId !== f.loja) return;
+      if (!dateInRange(order.date, f.dateFrom, f.dateTo)) return;
+      if (f.tipo && f.tipo !== 'AMBOS' && order.type !== f.tipo) return;
+      Object.entries(order.lines || {}).forEach(([productId, line]) => {
+        const product = productById(productId);
+        if (!product || !allowedTypes.includes(product.tipo)) return;
+        if (!salesMap.has(product.id)) salesMap.set(product.id, {product, salesQty:0, breakQty:0, breakValue:0});
+        const row = salesMap.get(product.id);
+        const breakQty = toNumber(line?.quebraQty);
+        row.breakQty += breakQty;
+        row.breakValue += breakQty * latestCost(order.storeId, productId, order.date);
+      });
+    });
+    return Array.from(salesMap.values()).sort((a,b) => (b.salesQty - a.salesQty) || String(a.product.nomeSistema || '').localeCompare(String(b.product.nomeSistema || ''),'pt-BR'));
+  }
+
+  function rankingRows(rows, key, {limit=8, ascending=false, positiveOnly=false}={}){
+    let filtered = rows.slice();
+    if (positiveOnly) filtered = filtered.filter(r => toNumber(r[key]) > 0);
+    filtered.sort((a,b) => ascending ? (toNumber(a[key]) - toNumber(b[key])) || String(a.product.nomeSistema || '').localeCompare(String(b.product.nomeSistema || ''),'pt-BR') : (toNumber(b[key]) - toNumber(a[key])) || String(a.product.nomeSistema || '').localeCompare(String(b.product.nomeSistema || ''),'pt-BR'));
+    return filtered.slice(0, limit);
+  }
+
+  function renderPresentationRanking(title, rows, valueLabel, valueKey, tone='green'){
+    return `<div class="card tv-panel">
+      <div class="panel-head"><div><h3>${escapeHtml(title)}</h3><p class="muted small">${escapeHtml(valueLabel)}</p></div></div>
+      <div class="tv-ranking-list">${rows.map((row, index) => `
+        <div class="tv-ranking-item ${tone}">
+          <div class="tv-ranking-pos">${index + 1}</div>
+          <div class="tv-ranking-main">
+            <strong>${escapeHtml(row.product?.nomeSistema || 'Produto')}</strong>
+            <small>${productTypeName(row.product?.tipo || '')}</small>
+          </div>
+          <div class="tv-ranking-value">${fmt.format(Math.round(toNumber(row[valueKey])))}</div>
+        </div>`).join('') || `<div class="empty">Sem dados suficientes para exibir o ranking.</div>`}</div>
+    </div>`;
+  }
+
+  function renderDashboardPresentation(){
+    setTitle('Dashboard Apresentação', 'Painel executivo para TV com venda x quebra e ranking de itens.');
+    const f = state.filters;
+    if (!f.tipo) f.tipo = 'AMBOS';
+    const metrics = computeMetrics(f);
+    const productRows = computePresentationProductStats(f);
+    const soldRows = rankingRows(productRows, 'salesQty', {limit:8, positiveOnly:true});
+    const leastSoldRows = rankingRows(productRows, 'salesQty', {limit:8, ascending:true, positiveOnly:true});
+    const highestBreakRows = rankingRows(productRows, 'breakQty', {limit:8, positiveOnly:true});
+    const lowestBreakRows = rankingRows(productRows, 'breakQty', {limit:8, ascending:true, positiveOnly:true});
+    const salesQtyTotal = sum(productRows.map(r => r.salesQty));
+    const breakQtyTotal = sum(productRows.map(r => r.breakQty));
+    const breakPct = metrics.vendaValida > 0 ? (metrics.quebra / metrics.vendaValida) * 100 : 0;
+    const salesBar = metrics.vendaValida > 0 ? 100 : 0;
+    const breakBar = metrics.vendaValida > 0 ? Math.max(8, Math.min(100, (metrics.quebra / metrics.vendaValida) * 100)) : (metrics.quebra > 0 ? 12 : 0);
+    $('#viewRoot').innerHTML = `
+      <section class="tv-dashboard">
+        <div class="card tv-hero-card">
+          <div>
+            <span class="eyebrow">Modo apresentação</span>
+            <h1>Dashboard para TV</h1>
+            <p>Resumo visual com os principais resultados acumulados e ranking dos itens para acompanhamento da operação.</p>
+          </div>
+          <div class="exec-hero-actions">
+            <button class="btn btn-soft" onclick="App.go('dashboard')">▥ Voltar ao dashboard</button>
+          </div>
+        </div>
+
+        <div class="card exec-filters-card">${adminFiltersHtml('tvdash')}</div>
+
+        <div class="tv-summary-grid">
+          ${execMetricCard('▥','Venda acumulada', money.format(metrics.vendaValida), `${fmt.format(salesQtyTotal)} un vendidas`, 'green')}
+          ${execMetricCard('↘','Quebra acumulada', money.format(metrics.quebra), `${fmt.format(breakQtyTotal)} un quebradas`, metrics.quebra ? 'red' : 'green')}
+          ${execMetricCard('%','% quebra', `${breakPct.toFixed(2).replace('.',',')}%`, 'quebra sobre venda válida', breakPct > 10 ? 'red' : breakPct > 5 ? 'amber' : 'green')}
+          ${execMetricCard('◌','Itens com movimento', fmt.format(productRows.filter(r => r.salesQty > 0 || r.breakQty > 0).length), 'produtos com venda ou quebra', 'blue')}
+        </div>
+
+        <div class="tv-grid">
+          <div class="card tv-panel tv-comparison-panel">
+            <div class="panel-head"><div><h3>Venda acumulada x quebra acumulada</h3><p class="muted small">Comparativo em valor para acompanhamento rápido na TV.</p></div></div>
+            <div class="tv-comparison-block">
+              <div class="tv-comparison-row">
+                <div class="tv-comparison-label"><strong>Venda acumulada</strong><small>${money.format(metrics.vendaValida)}</small></div>
+                <div class="tv-comparison-bar"><span class="sales" style="width:${salesBar}%;"></span></div>
+              </div>
+              <div class="tv-comparison-row">
+                <div class="tv-comparison-label"><strong>Quebra acumulada</strong><small>${money.format(metrics.quebra)}</small></div>
+                <div class="tv-comparison-bar"><span class="break" style="width:${breakBar}%;"></span></div>
+              </div>
+            </div>
+          </div>
+          ${renderPresentationRanking('Top itens mais vendidos', soldRows, 'quantidade vendida', 'salesQty', 'green')}
+          ${renderPresentationRanking('Top itens menos vendidos', leastSoldRows, 'menor quantidade vendida', 'salesQty', 'blue')}
+          ${renderPresentationRanking('Itens de maiores quebras', highestBreakRows, 'maior quantidade quebrada', 'breakQty', 'red')}
+          ${renderPresentationRanking('Itens de menores quebras', lowestBreakRows, 'menor quantidade quebrada', 'breakQty', 'amber')}
+        </div>
+      </section>`;
+    bindAdminFilters('tvdash');
   }
 
   function renderAnalytics(){
