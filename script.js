@@ -4924,6 +4924,77 @@
     bindAdminFilters('dash');
   }
 
+
+  // v76 - Dashboard inicial ultraleve para evitar travamento na entrada.
+  // Não varre lojas/produtos, não calcula estoque e não monta resultado do pedido no login.
+  function renderDashboard(){
+    setTitle('Dashboard Inicial', 'Entrada rápida do sistema. Abra as análises somente quando precisar.');
+    const importIssuesCount = Array.isArray(Store.data?.importIssues) ? Store.data.importIssues.filter(importIssueStillRelevant).length : 0;
+    const duplicatesCount = Array.isArray(Store.data?.importDuplicates) ? Store.data.importDuplicates.filter(d => d.status === 'PENDENTE').length : 0;
+    const ticketsCount = Array.isArray(Store.data?.tickets) ? Store.data.tickets.filter(t => ['ABERTO','EM_ATENDIMENTO'].includes(t.status)).length : 0;
+    const deliveriesCount = Array.isArray(Store.data?.deliveries) ? Store.data.deliveries.length : 0;
+    const salesImportsCount = Array.isArray(Store.data?.salesImports) ? Store.data.salesImports.length : 0;
+    const modules = [
+      ['Importar XML/PDF','Importe ou confira entregas por XML/PDF.','importar-pdf','▣','green'],
+      ['Base de vendas','Importe e acompanhe a base de vendas Excel.','bases','▤','blue'],
+      ['Conciliação','Defina entrega e múltiplas datas base.','conciliacao','◈','amber'],
+      ['Pedidos','Análise de pedido por produto.','analise-pedidos','▤','green'],
+      ['Resultado do Pedido','Analise acerto, excesso, quebra e risco.','resultado-pedido','◬','blue'],
+      ['Dashboard Apresentação','Painel para TV com venda x quebra e rankings.','dashboard-apresentacao','◫','green'],
+      ['Estoque em Loja','Acompanhe estoque bom e risco de falta.','estoque-loja','▦','amber'],
+      ['Rupturas','Itens obrigatórios e rupturas pendentes.','rupturas','⚠','red'],
+      ['Duplicidades','Resolva importações duplicadas.','duplicidades','⧉','amber'],
+      ['Histórico','Auditoria e histórico das importações.','historico','↺','blue']
+    ];
+    $('#viewRoot').innerHTML = `
+      <section class="dashboard-shell dashboard-light">
+        <div class="card exec-hero-card">
+          <div>
+            <span class="eyebrow">Acesso rápido</span>
+            <h1>Dashboard inicial</h1>
+            <p>Esta tela foi deixada leve para o sistema abrir sem travar. Os cálculos completos carregam apenas quando você acessa cada módulo.</p>
+            <div class="hero-status-row">
+              <span class="status-chip green">Entrada leve ativada</span>
+              <span class="status-chip">Sem varredura geral de lojas/produtos</span>
+            </div>
+          </div>
+          <div class="exec-hero-actions">
+            <button class="btn btn-primary" onclick="App.go('analise-pedidos')">▤ Pedidos</button>
+            <button class="btn btn-soft" onclick="App.go('resultado-pedido')">◬ Resultado do Pedido</button>
+            <button class="btn btn-soft" onclick="App.go('dashboard-apresentacao')">◫ TV</button>
+          </div>
+        </div>
+
+        <div class="exec-metric-grid">
+          ${execMetricCard('▣','Entregas carregadas', fmt.format(deliveriesCount), 'registros no sistema', deliveriesCount ? 'green' : 'blue')}
+          ${execMetricCard('▤','Bases importadas', fmt.format(salesImportsCount), 'arquivos de venda', salesImportsCount ? 'green' : 'blue')}
+          ${execMetricCard('✉','Chamados ativos', fmt.format(ticketsCount), 'abertos ou em atendimento', ticketsCount ? 'amber' : 'green')}
+          ${execMetricCard('!','Pendências de importação', fmt.format(importIssuesCount + duplicatesCount), `${fmt.format(importIssuesCount)} erro(s) / ${fmt.format(duplicatesCount)} duplicidade(s)`, (importIssuesCount + duplicatesCount) ? 'amber' : 'green')}
+        </div>
+
+        <div class="card exec-panel">
+          <div class="panel-head"><div><h3>Módulos principais</h3><p class="muted small">Clique no módulo desejado. Os relatórios pesados só serão calculados dentro da própria aba.</p></div></div>
+          <div class="module-grid dashboard-light-modules">
+            ${modules.map(([title,desc,page,icon,tone]) => `
+              <button class="module-card ${tone}" onclick="App.go('${page}')">
+                <span>${icon}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(desc)}</small>
+              </button>`).join('')}
+          </div>
+        </div>
+
+        <div class="card exec-panel">
+          <div class="panel-head"><div><h3>Orientação</h3><p class="muted small">Para evitar travamento, o Dashboard inicial não calcula todos os indicadores automaticamente.</p></div></div>
+          <div class="exec-shortcuts">
+            <button class="btn btn-soft" onclick="App.go('importar-pdf')">Importar XML/PDF</button>
+            <button class="btn btn-soft" onclick="App.go('bases')">Importar base</button>
+            <button class="btn btn-soft" onclick="App.go('conciliacao')">Conciliar base</button>
+            <button class="btn btn-soft" onclick="App.go('analise-pedidos')">Montar pedido</button>
+            <button class="btn btn-soft" onclick="App.go('resultado-pedido')">Ver resultado</button>
+          </div>
+        </div>
+      </section>`;
+  }
+
   function computePresentationProductStats(f={}){
     const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
     const salesMap = new Map();
