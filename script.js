@@ -15,60 +15,31 @@
   const CLOUD_SALES_CHUNK_COLLECTION = 'sales_chunks';
   const CLOUD_SALES_CHUNK_SIZE = 500;
   const CLOUD_CHUNK_SIZE = 700000;
-  function icon(name){
-    const paths = {
-      home:'M3 11.5 12 4l9 7.5V21a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z',
-      monitor:'M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6v2h3v2H7v-2h3v-2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z',
-      file:'M6 3h8l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm8 1v5h5',
-      chart:'M4 19h18v2H3a1 1 0 0 1-1-1V4h2v15Zm3-2V9h3v8H7Zm5 0V5h3v12h-3Zm5 0v-6h3v6h-3Z',
-      scale:'M12 3v3h5l4 7h-8l4-7h-5v15h5v2H7v-2h5V6H7l4 7H3l4-7h5V3h2Zm-7 10h6a3 3 0 0 1-6 0Zm8 0h8a4 4 0 0 1-8 0Z',
-      alert:'M12 3 2 21h20L12 3Zm1 14h-2v2h2v-2Zm0-8h-2v6h2V9Z',
-      clock:'M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-2.35-5.65L15 9h7V2l-3 3A9.96 9.96 0 0 0 12 2Zm1 5h-2v6l5 3 1-1.73-4-2.27V7Z',
-      tag:'M3 11V4a1 1 0 0 1 1-1h7l10 10-8 8L3 11Zm5-4a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
-      money:'M12 2v3c-3 .3-5 2-5 4.5 0 3 2.6 4 5 4.6 2 .5 3 .9 3 2 0 1.1-1.1 2-3 2-1.8 0-3.3-.7-4.6-1.8L6 18.4A8.7 8.7 0 0 0 12 21v3h2v-3c3.2-.4 5.2-2.2 5.2-4.8 0-3-2.5-4-5.2-4.7-2-.5-3-.9-3-2 0-1 1-1.8 2.7-1.8 1.5 0 2.8.5 4 1.3l1.2-2.2A8 8 0 0 0 14 5V2h-2Z',
-      headset:'M4 13a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3h-2v-2h2a1 1 0 0 0 1-1v-5a6 6 0 0 0-12 0v5a1 1 0 0 0 1 1h2v2H7a3 3 0 0 1-3-3v-5Zm3-1h3v7H7v-7Zm10 0h-3v7h3v-7Z',
-      gear:'M19.4 13.5a7.8 7.8 0 0 0 .1-1.5 7.8 7.8 0 0 0-.1-1.5l2-1.5-2-3.5-2.4 1a8.2 8.2 0 0 0-2.6-1.5L14 2h-4l-.4 2.5A8.2 8.2 0 0 0 7 6L4.6 5l-2 3.5 2 1.5a7.8 7.8 0 0 0-.1 1.5c0 .5 0 1 .1 1.5l-2 1.5 2 3.5 2.4-1a8.2 8.2 0 0 0 2.6 1.5L10 22h4l.4-2.5A8.2 8.2 0 0 0 17 18l2.4 1 2-3.5-2-1.5ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z',
-      check:'M9.2 16.6 4.8 12.2 3.4 13.6 9.2 19 21 7.8 19.6 6.4 9.2 16.6Z',
-      boxes:'M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Zm8 1.2 4.9-2.8L12 3.9 7.1 5.9 12 8.7Zm-6 1.2v5.5l5 2.8v-5.5L6 9.9Zm13 0-5 2.8v5.5l5-2.8V9.9Z',
-      diamond:'M12 2 22 12 12 22 2 12 12 2Zm0 3.2L5.2 12 12 18.8 18.8 12 12 5.2Z',
-      users:'M8 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm8.5 1a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7ZM2 21a6 6 0 0 1 12 0H2Zm12.5 0a7.8 7.8 0 0 0-2.3-5.5 5 5 0 0 1 8.8 3.2V21h-6.5Z',
-      filter:'M3 5h18l-7 8v5l-4 2v-7L3 5Z',
-      percent:'M6.5 8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5ZM18 21a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5ZM5 20 19 4l-1.5-1.3-14 16L5 20Z',
-      cart:'M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4ZM3 3h2l2.4 11.2A2 2 0 0 0 9.4 16H18a2 2 0 0 0 1.9-1.4L22 7H7.2L6.7 5H3V3Z',
-      trend:'M3 17h18v2H3v-2Zm2-3 4-4 3 3 7-8 2 2-9 10-3-3-4 4-2-2Z',
-      upload:'M12 3 6 9h4v7h4V9h4l-6-6ZM5 19h14v2H5v-2Z',
-      leaf:'M20 4c-8.5.2-14 4.8-15 12.2L3 21l4.8-2C15.2 18 19.8 12.5 20 4Zm-5.5 5.5C11.5 11 9 13.4 7.2 16.2',
-      store:'M4 4h16l1 5v2h-2v10H5V11H3V9l1-5Zm3 7v7h10v-7H7Z'
-    };
-    const path = paths[name] || paths.home;
-    return `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"></path></svg>`;
-  }
-
   const ADMIN_USER = { usuario: 'gerenciacomercial', senha: 'sofolhas2026', nome: 'Administrador Comercial', role: 'admin' };
   const ADMIN_PAGES = [
-    {id:'dashboard', icon:icon('home'), label:'Dashboard'},
-    {id:'dashboard-apresentacao', icon:icon('monitor'), label:'Dashboard Apresentação'},
-    {id:'fechamento-dia', icon:icon('check'), label:'Fechamento do Dia'},
-    {id:'inventario-saida', icon:icon('boxes'), label:'Inventário de Saída'},
-    {id:'estoque-loja', icon:icon('store'), label:'Estoque em Loja'},
-    {id:'analises', icon:icon('chart'), label:'Análises Comerciais'},
-    {id:'analise-pedidos', icon:icon('cart'), label:'Pedidos'},
-    {id:'resultado-pedido', icon:icon('trend'), label:'Resultado do Pedido'},
-    {id:'importar-pdf', icon:icon('upload'), label:'Importar XML/PDF'},
-    {id:'conferencia-importacao', icon:icon('check'), label:'Conferência de Importação'},
-    {id:'duplicidades', icon:icon('diamond'), label:'Duplicidades'},
-    {id:'ofertas', icon:icon('tag'), label:'Ofertas'},
-    {id:'precos', icon:icon('money'), label:'Acompanhamento de Preços'},
-    {id:'chamados', icon:icon('headset'), label:'Chamados'},
-    {id:'bases', icon:icon('file'), label:'Bases de Venda'},
-    {id:'conciliacao', icon:icon('scale'), label:'Conciliação'},
-    {id:'faltas', icon:icon('diamond'), label:'Faltas e Qualidade'},
-    {id:'pendencias', icon:icon('boxes'), label:'Pendências de Bandejas'},
-    {id:'itens-obrigatorios', icon:icon('alert'), label:'Itens Obrigatórios'},
-    {id:'rupturas', icon:icon('alert'), label:'Rupturas'},
-    {id:'mix', icon:icon('leaf'), label:'Mix por Loja'},
-    {id:'usuarios', icon:icon('users'), label:'Usuários', adminOnly:true},
-    {id:'historico', icon:icon('clock'), label:'Histórico'}
+    {id:'dashboard', icon:'▥', label:'Dashboard'},
+    {id:'dashboard-apresentacao', icon:'◫', label:'Dashboard Apresentação'},
+    {id:'fechamento-dia', icon:'✓', label:'Fechamento do Dia'},
+    {id:'inventario-saida', icon:'▨', label:'Inventário de Saída'},
+    {id:'estoque-loja', icon:'▦', label:'Estoque em Loja'},
+    {id:'analises', icon:'▥', label:'Análises Comerciais'},
+    {id:'analise-pedidos', icon:'▤', label:'Pedidos'},
+    {id:'resultado-pedido', icon:'◬', label:'Resultado do Pedido'},
+    {id:'importar-pdf', icon:'▣', label:'Importar XML/PDF'},
+    {id:'conferencia-importacao', icon:'☑', label:'Conferência de Importação'},
+    {id:'duplicidades', icon:'⧉', label:'Duplicidades'},
+    {id:'ofertas', icon:'🏷', label:'Ofertas'},
+    {id:'precos', icon:'💲', label:'Acompanhamento de Preços'},
+    {id:'chamados', icon:'✉', label:'Chamados'},
+    {id:'bases', icon:'▤', label:'Bases de Venda'},
+    {id:'conciliacao', icon:'◈', label:'Conciliação'},
+    {id:'faltas', icon:'◇', label:'Faltas e Qualidade'},
+    {id:'pendencias', icon:'▧', label:'Pendências de Bandejas'},
+    {id:'itens-obrigatorios', icon:'🚨', label:'Itens Obrigatórios'},
+    {id:'rupturas', icon:'⚠', label:'Rupturas'},
+    {id:'mix', icon:'◌', label:'Mix por Loja'},
+    {id:'usuarios', icon:'♙', label:'Usuários', adminOnly:true},
+    {id:'historico', icon:'↺', label:'Histórico'}
   ];
   const NAV_GROUPS = [
     {title:'Painel', pages:['dashboard','dashboard-apresentacao','fechamento-dia']},
@@ -79,10 +50,10 @@
     {title:'Administração', pages:['usuarios','historico']}
   ];
   const STORE_NAV_GROUPS = [
-    {title:'Início', items:[['inicio-loja',icon('home'),'Visão Geral']]},
-    {title:'Operação da loja', items:[['pedido',icon('cart'),'Pedidos'], ['quebras',icon('alert'),'Quebras'], ['inventario-saida',icon('boxes'),'Inventário'], ['estoque-loja',icon('store'),'Estoque em Loja'], ['precos-loja',icon('money'),'Preços em Loja']]},
-    {title:'Atendimento', items:[['chamados',icon('headset'),'Chamados']]},
-    {title:'Histórico', items:[['meus-pedidos',icon('file'),'Meus Pedidos'], ['historico-loja',icon('clock'),'Histórico'], ['correcao-loja',icon('alert'),'Solicitações']]}
+    {title:'Início', items:[['inicio-loja','⌂','Visão Geral']]},
+    {title:'Operação da loja', items:[['pedido','▣','Pedidos'], ['quebras','⚠','Quebras'], ['inventario-saida','▨','Inventário'], ['estoque-loja','▦','Estoque em Loja'], ['precos-loja','💲','Preços em Loja']]},
+    {title:'Atendimento', items:[['chamados','✉','Chamados']]},
+    {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
   const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','dashboard-apresentacao','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','resultado-pedido','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
   const DEFAULT_COMMERCIAL_USERS = [
@@ -1842,7 +1813,7 @@
       loja: '',
       dateFrom: '',
       dateTo: '',
-      tipo: 'AMBOS'
+      tipo: 'BANDEJA'
     },
     filterPanelsOpen: {},
     mobileMode: false,
@@ -2539,14 +2510,14 @@
     const p = productById(offer.productId);
     const period = offerPeriodLabel(offer);
     const periodInfo = period && period !== '—' ? ` • período: ${period}` : '';
-    return `<div class="offer-notice"><strong>Item em oferta nesta data</strong><span>${escapeHtml(p?.nomeSistema || 'Produto')} por ${money.format(toNumber(offer.price))}${periodInfo}${offer.notes ? ' • '+escapeHtml(offer.notes) : ''}</span></div>`;
+    return `<div class="offer-notice"><strong>🏷 Item em oferta nesta data</strong><span>${escapeHtml(p?.nomeSistema || 'Produto')} por ${money.format(toNumber(offer.price))}${periodInfo}${offer.notes ? ' • '+escapeHtml(offer.notes) : ''}</span></div>`;
   }
 
   function renderStoreOfferSummary(storeId, date, type){
     const offers = getOffersForStoreDate(storeId, date, type);
     if (!offers.length) return '';
     return `<div class="card offer-summary-card">
-      <h3>Produtos em oferta nesta data</h3>
+      <h3>🏷 Produtos em oferta nesta data</h3>
       <div class="offer-chip-row">
         ${offers.map(o => {
           const p = productById(o.productId);
@@ -2721,7 +2692,7 @@
     const mobileBtn = $('#mobileModeBtn');
     if (mobileBtn) {
       mobileBtn.classList.toggle('hidden', isBackoffice);
-      mobileBtn.textContent = state.mobileMode ? 'Fechar modo mobile' : 'Abrir modo mobile';
+      mobileBtn.textContent = state.mobileMode ? '🖥️ Fechar modo mobile' : '📱 Abrir modo mobile';
     }
     $('#profileName').textContent = state.session.role === 'admin' ? 'Administrador Comercial' : (state.session.role === 'commercial' ? state.session.nome : (storeById(state.session.storeId)?.nome || state.session.nome));
     $('#contextBadge').textContent = state.session.role === 'admin' ? 'ADM Comercial' : (state.session.role === 'commercial' ? 'Comercial' : `Loja: ${storeById(state.session.storeId)?.nome || ''}`);
@@ -2843,13 +2814,13 @@
         </div>
         <div class="actions">
           <span class="status-chip ${conf.baseDates?.length?'':'amber'}">${conf.baseDates?.length?'✓ Base conciliada':'Base pendente'}</span>
-          <span class="status-chip amber">Prazo pedido até ${Store.data.appConfig.pedidoDeadline}</span>
+          <span class="status-chip amber">⏱ Prazo pedido até ${Store.data.appConfig.pedidoDeadline}</span>
           <label class="date-inline-label">Data de entrega <input type="date" id="orderDateInput" value="${order.date}" /></label>
         </div>
       </div>
       <div class="filter-row">
         <div class="segmented">
-          <button data-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">Folhagens</button>
+          <button data-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">☘ Folhagens</button>
           <button data-type="BANDEJA" class="${type==='BANDEJA'?'active':''}">▦ Bandejas</button>
         </div>
         ${editLocked ? `<span class="status-chip red">Pedido bloqueado após horário ou já enviado</span>` : ''}
@@ -2857,12 +2828,12 @@
       ${renderStoreOfferSummary(storeId, order.date, type)}
       ${renderStoreStockSummaryInOrder(storeId, type, order.date)}
       <div class="grid kpis">
-        ${kpi(icon('leaf'),'Itens ativos',products.length,'de '+products.length+' itens')}
-        ${kpi(icon('alert'),'Itens em atenção',rows.filter(r=>r.status.level!=='ok').length,'validar antes de enviar','amber')}
+        ${kpi('☘','Itens ativos',products.length,'de '+products.length+' itens')}
+        ${kpi('!','Itens em atenção',rows.filter(r=>r.status.level!=='ok').length,'validar antes de enviar','amber')}
         ${kpi('✎','Pendências',req,'justificativa obrigatória',req?'red':'')}
-        ${kpi(icon('chart'),'Última base de venda',(conf.baseDates||[]).slice(-1).map(formatDate)[0] || '—','conciliação ADM')}
+        ${kpi('▥','Última base de venda',(conf.baseDates||[]).slice(-1).map(formatDate)[0] || '—','conciliação ADM')}
         ${kpi('↯','Correções',Store.data.corrections.filter(c=>c.storeId===storeId && c.status==='PENDENTE').length,'aguardando ADM','amber')}
-        ${kpi(icon('check'),'Preenchimento',Math.round((filled/Math.max(1,rows.length))*100)+'%','do pedido')}
+        ${kpi('✓','Preenchimento',Math.round((filled/Math.max(1,rows.length))*100)+'%','do pedido')}
       </div>
       <div class="table-wrap order-table-wrap">
         <table class="order-table">
@@ -2905,8 +2876,8 @@
         </div>
       </div>
       <div class="footer-actions">
-        <button class="btn btn-ghost" id="saveDraft">Salvar rascunho</button>
-        <button class="btn btn-primary" id="sendOrder">Enviar pedido</button>
+        <button class="btn btn-ghost" id="saveDraft">💾 Salvar rascunho</button>
+        <button class="btn btn-primary" id="sendOrder">✈ Enviar pedido</button>
       </div>
     `;
     $$('.segmented button').forEach(b=>b.addEventListener('click',()=>{state.orderType=b.dataset.type; render();}));
@@ -3067,7 +3038,7 @@
         </div>
       </div>
       <div class="footer-actions">
-        <button class="btn btn-primary" id="saveStorePrices">Salvar preços da loja</button>
+        <button class="btn btn-primary" id="saveStorePrices">💾 Salvar preços da loja</button>
       </div>
     `;
     $('#saveStorePrices')?.addEventListener('click', async () => {
@@ -3120,10 +3091,10 @@
     setTitle('Acompanhamento de Preços', 'Acompanhe o preço praticado nas lojas e as maiores margens aplicadas por rede, loja e produto.');
     $('#viewRoot').innerHTML = `
       <div class="grid kpis">
-        ${kpi(icon('money'),'Coletas',fmt.format(rows.length),'preços informados')}
+        ${kpi('💲','Coletas',fmt.format(rows.length),'preços informados')}
         ${kpi('%','Margem média',avgMargin.toFixed(1).replace('.', ',')+'%','sobre preço da loja',avgMargin>=45?'amber':'')}
-        ${kpi(icon('trend'),'Markup médio',avgMarkup.toFixed(1).replace('.', ',')+'%','sobre preço Só Folhas')}
-        ${kpi(icon('store'),'Lojas acompanhadas',fmt.format(new Set(rows.map(r=>r.storeId)).size),'no período')}
+        ${kpi('↗','Markup médio',avgMarkup.toFixed(1).replace('.', ',')+'%','sobre preço Só Folhas')}
+        ${kpi('🏬','Lojas acompanhadas',fmt.format(new Set(rows.map(r=>r.storeId)).size),'no período')}
       </div>
       <div class="card"><h3>Filtros</h3><div class="filter-row">
         <div class="filter">Data inicial <input type="date" id="priceDateFrom" value="${escapeHtml(f.dateFrom)}"></div>
@@ -3223,22 +3194,22 @@
           <p class="muted">Informe somente as quebras. ${cycleHelp}</p>
         </div>
         <div class="actions">
-          <span class="status-chip amber">Prazo quebra até ${Store.data.appConfig.quebraDeadline}</span>
-          <span class="status-chip green">${type === 'BANDEJA' ? 'Última entrega por produto' : 'Data de entrega: '+refLabel}</span>
+          <span class="status-chip amber">⏱ Prazo quebra até ${Store.data.appConfig.quebraDeadline}</span>
+          <span class="status-chip green">📅 ${type === 'BANDEJA' ? 'Última entrega por produto' : 'Data de entrega: '+refLabel}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="segmented">
-          <button data-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">Folhagens</button>
+          <button data-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">☘ Folhagens</button>
           <button data-type="BANDEJA" class="${type==='BANDEJA'?'active':''}">▦ Bandejas</button>
         </div>
         ${quebraLocked ? `<span class="status-chip red">Quebra bloqueada após horário permitido</span>` : '<span class="status-chip green">Quebra liberada para edição</span>'}
       </div>
       <div class="grid kpis">
-        ${kpi(icon('alert'),'Total de quebra',fmt.format(totalQuebra),'unidades informadas',totalQuebra?'amber':'')}
-        ${kpi(icon('leaf'),'Itens com quebra',preenchidos,'itens preenchidos')}
-        ${kpi(icon('chart'),'Tipo',type === 'FOLHAGEM' ? 'Folhagens' : 'Bandejas','categoria selecionada')}
-        ${kpi(icon('clock'),'Vínculo',type === 'BANDEJA' ? 'Última entrega real' : refLabel,type === 'BANDEJA' ? 'por loja e produto' : (ref.isWeekend ? 'segunda registra sábado e domingo' : 'dia anterior ao preenchimento'))}
+        ${kpi('⚠','Total de quebra',fmt.format(totalQuebra),'unidades informadas',totalQuebra?'amber':'')}
+        ${kpi('☘','Itens com quebra',preenchidos,'itens preenchidos')}
+        ${kpi('▥','Tipo',type === 'FOLHAGEM' ? 'Folhagens' : 'Bandejas','categoria selecionada')}
+        ${kpi('📅','Vínculo',type === 'BANDEJA' ? 'Última entrega real' : refLabel,type === 'BANDEJA' ? 'por loja e produto' : (ref.isWeekend ? 'segunda registra sábado e domingo' : 'dia anterior ao preenchimento'))}
       </div>
       <div class="table-wrap order-table-wrap">
         <table class="order-table">
@@ -3266,7 +3237,7 @@
         </table>
       </div>
       <div class="footer-actions">
-        <button class="btn btn-ghost" id="saveBreaks">Salvar quebras</button>
+        <button class="btn btn-ghost" id="saveBreaks">💾 Salvar quebras</button>
       </div>
     `;
     $$('.segmented button').forEach(b=>b.addEventListener('click',()=>{state.orderType=b.dataset.type; renderStoreBreaks();}));
@@ -3298,7 +3269,7 @@
           <div class="product-cell"><span class="prod-dot"></span><strong>${p.nomeSistema}</strong></div>
           ${renderOfferNotice(offer)}
           ${justReq ? `<div class="justify-box">
-            <strong>Justificativa obrigatória:</strong>
+            <strong>⚠ Justificativa obrigatória:</strong>
             <span>${status.reasons.join(' ')}</span>
             <input data-field="justification" data-product-id="${p.id}" value="${escapeHtml(line.justification||'')}" placeholder="Digite a justificativa..." />
             <button class="btn btn-sm btn-danger" onclick="App.openCorrectionModal('${order.storeId}','${p.id}','${p.nomeSistema}')">Solicitar correção</button>
@@ -3308,7 +3279,7 @@
         <td data-label="Entrega base" class="num">${fmt.format(stats.deliveryBase)}</td>
         <td data-label="Inventário bom" class="num ${invGood < stats.saleBase ? 'negative' : 'positive'}">${fmt.format(invGood)}</td>
         <td data-label="Sugestão da loja" class="num"><input class="input-sm ${justReq?'input-error':''}" ${editLocked?'disabled':''} data-field="suggestion" data-product-id="${p.id}" type="number" min="0" value="${toNumber(line.suggestion)}"></td>
-        <td data-label="Sugestão comercial" class="num"><span class="badge gray">${fmt.format(stats.sugestaoComercial)}</span></td>
+        <td data-label="Sugestão comercial" class="num"><span class="badge gray">🔒 ${fmt.format(stats.sugestaoComercial)}</span></td>
         <td data-label="Status"><span class="badge ${status.level==='red'?'red':status.level==='amber'?'amber':'green'}">${status.label}</span></td>
       </tr>`;
   }
@@ -3528,16 +3499,16 @@
           <button class="btn btn-soft" onclick="App.go('importar-pdf')">Importar XML/PDF</button>
           <button class="btn btn-soft" onclick="App.go('bases')">Importar base</button>
         </div>
-        ${closing.blockers.length ? `<div class="closing-blockers">${closing.blockers.map(b => `<div>Alerta: ${escapeHtml(b)}</div>`).join('')}</div>` : `<div class="closing-ok">✓ Todos os pontos principais estão prontos para esta data.</div>`}
+        ${closing.blockers.length ? `<div class="closing-blockers">${closing.blockers.map(b => `<div>⚠ ${escapeHtml(b)}</div>`).join('')}</div>` : `<div class="closing-ok">✓ Todos os pontos principais estão prontos para esta data.</div>`}
       </div>
 
       <div class="grid kpis" style="margin-top:14px">
-        ${kpi(icon('check'),'Status geral',closing.status, closing.status === 'OK' ? 'pronto para análise' : 'existem pendências', statusCls)}
-        ${kpi(icon('file'),'NF/XML/PDF',`${fmt.format(closing.importedDeliveryRedes.length)}/${fmt.format(closing.expectedRedes.length)}`, closing.missingDeliveryRedes.length ? `faltam: ${closing.missingDeliveryRedes.join(', ')}` : 'redes importadas', closing.missingDeliveryRedes.length ? 'amber' : 'green')}
-        ${kpi(icon('file'),'Base de vendas',fmt.format(closing.sales.length),'registros na data', closing.sales.length ? 'green' : 'amber')}
-        ${kpi(icon('tag'),'Ofertas ativas',fmt.format(closing.offers.length),'cadastradas para o dia', closing.offers.length ? 'green' : '')}
-        ${kpi(icon('alert'),'Rupturas pendentes',fmt.format(closing.criticalPending.length),'itens obrigatórios sem justificativa', closing.criticalPending.length ? 'red' : 'green')}
-        ${kpi(icon('alert'),'Divergências',fmt.format(closing.issues.length + closing.cancelled.length),`${fmt.format(closing.cancelled.length)} NF cancelada(s)`, closing.issues.length ? 'amber' : (closing.cancelled.length ? 'amber' : 'green'))}
+        ${kpi('✓','Status geral',closing.status, closing.status === 'OK' ? 'pronto para análise' : 'existem pendências', statusCls)}
+        ${kpi('▣','NF/XML/PDF',`${fmt.format(closing.importedDeliveryRedes.length)}/${fmt.format(closing.expectedRedes.length)}`, closing.missingDeliveryRedes.length ? `faltam: ${closing.missingDeliveryRedes.join(', ')}` : 'redes importadas', closing.missingDeliveryRedes.length ? 'amber' : 'green')}
+        ${kpi('▤','Base de vendas',fmt.format(closing.sales.length),'registros na data', closing.sales.length ? 'green' : 'amber')}
+        ${kpi('🏷','Ofertas ativas',fmt.format(closing.offers.length),'cadastradas para o dia', closing.offers.length ? 'green' : '')}
+        ${kpi('🚨','Rupturas pendentes',fmt.format(closing.criticalPending.length),'itens obrigatórios sem justificativa', closing.criticalPending.length ? 'red' : 'green')}
+        ${kpi('!','Divergências',fmt.format(closing.issues.length + closing.cancelled.length),`${fmt.format(closing.cancelled.length)} NF cancelada(s)`, closing.issues.length ? 'amber' : (closing.cancelled.length ? 'amber' : 'green'))}
       </div>
 
       <div class="card">
@@ -3713,8 +3684,8 @@
       <div class="view-head">
         <div><h1>${escapeHtml(store?.nome || '')}</h1><p class="muted">Saldo em loja por produto. Para bandejas, o saldo é contínuo e vinculado à última entrega real.</p></div>
       </div>
-      <div class="filter-row"><div class="segmented"><button data-stock-type="BANDEJA" class="${type==='BANDEJA'?'active':''}">▦ Bandejas</button><button data-stock-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">Folhagens</button></div></div>
-      <div class="grid kpis">${kpi('▦','Itens com saldo',rows.length,'produtos acompanhados')}${kpi(icon('alert'),'Atenção',low,'estoque baixo/risco',low?'amber':'green')}${kpi(icon('check'),'Estoque bom atual',fmt.format(totalCurrent),'unidades em loja')}</div>
+      <div class="filter-row"><div class="segmented"><button data-stock-type="BANDEJA" class="${type==='BANDEJA'?'active':''}">▦ Bandejas</button><button data-stock-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">☘ Folhagens</button></div></div>
+      <div class="grid kpis">${kpi('▦','Itens com saldo',rows.length,'produtos acompanhados')}${kpi('⚠','Atenção',low,'estoque baixo/risco',low?'amber':'green')}${kpi('✓','Estoque bom atual',fmt.format(totalCurrent),'unidades em loja')}</div>
       <div class="card"><h3>Estoque em loja</h3>${renderStoreStockTable(rows)}</div>
     `;
     $$('[data-stock-type]').forEach(btn => btn.addEventListener('click', () => { state.storeStock.type = btn.dataset.stockType; renderStoreStockPage(); }));
@@ -3733,7 +3704,7 @@
     const totalReinforcement = sum(rows.map(r => r.reinforcement));
     setTitle('Estoque em Loja', 'Controle de saldo bom atual por loja e produto, com atenção especial para bandejas.');
     $('#viewRoot').innerHTML = `
-      <div class="grid kpis">${kpi('▦','Itens analisados',fmt.format(rows.length),'produtos/lojas')}${kpi(icon('alert'),'Atenção',fmt.format(low),'estoque baixo/risco',low?'red':'green')}${kpi(icon('check'),'Estoque bom atual',fmt.format(totalCurrent),'unidades')}${kpi('+','Reforço sugerido',fmt.format(totalReinforcement),'unidades')}</div>
+      <div class="grid kpis">${kpi('▦','Itens analisados',fmt.format(rows.length),'produtos/lojas')}${kpi('⚠','Atenção',fmt.format(low),'estoque baixo/risco',low?'red':'green')}${kpi('✓','Estoque bom atual',fmt.format(totalCurrent),'unidades')}${kpi('+','Reforço sugerido',fmt.format(totalReinforcement),'unidades')}</div>
       <div class="card"><h3>Filtros do estoque</h3><div class="filter-row">
         <div class="filter">Data limite <input type="date" id="stockDate" value="${escapeHtml(f.date)}"></div>
         <div class="filter">Tipo <select id="stockType"><option value="BANDEJA" ${f.type==='BANDEJA'?'selected':''}>Bandejas</option><option value="FOLHAGEM" ${f.type==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="AMBOS" ${f.type==='AMBOS'?'selected':''}>Ambos</option></select></div>
@@ -3868,12 +3839,12 @@
           <p class="muted">Inventário de saída • ${type === 'BANDEJA' ? 'Bandejas vinculadas à última entrega real' : 'Data de entrega '+refLabel+' • Folhagens'}</p>
         </div>
         <div class="actions">
-          <span class="status-chip green">${type === 'BANDEJA' ? 'Última entrega por produto' : 'Data de entrega: '+refLabel}</span>
+          <span class="status-chip green">📅 ${type === 'BANDEJA' ? 'Última entrega por produto' : 'Data de entrega: '+refLabel}</span>
         </div>
       </div>
       <div class="filter-row">
         <div class="segmented">
-          <button data-inv-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">Folhagens</button>
+          <button data-inv-type="FOLHAGEM" class="${type==='FOLHAGEM'?'active':''}">☘ Folhagens</button>
           <button data-inv-type="BANDEJA" class="${type==='BANDEJA'?'active':''}">▦ Bandejas</button>
         </div>
         <span class="status-chip">${fmt.format(filled)} itens preenchidos</span>
@@ -3897,7 +3868,7 @@
             </tr>`).join('')}</tbody>
         </table></div>
       </div>
-      <div class="footer-actions"><button class="btn btn-primary" id="saveInventoryOut">Salvar inventário</button></div>
+      <div class="footer-actions"><button class="btn btn-primary" id="saveInventoryOut">💾 Salvar inventário</button></div>
     `;
     $$('[data-inv-type]').forEach(btn => btn.addEventListener('click', () => { state.inventoryOut.type = btn.dataset.invType; renderStoreInventoryOut(); }));
     $$('[data-inventory-field]').forEach(inp => {
@@ -3944,7 +3915,7 @@
     $('#viewRoot').innerHTML = `
       <div class="grid kpis">
         ${kpi('▨','Itens analisados',fmt.format(rows.length),'data selecionada')}
-        ${kpi(icon('alert'),'Estoque baixo',fmt.format(low.length),'risco de falta', low.length ? 'red' : 'green')}
+        ${kpi('⚠','Estoque baixo',fmt.format(low.length),'risco de falta', low.length ? 'red' : 'green')}
         ${kpi('↯','Sem inventário',fmt.format(noInv.length),'entrega sem informação da loja', noInv.length ? 'amber' : 'green')}
         ${kpi('+','Reforço sugerido',fmt.format(totalReinforcement),'unidades para voltar ao mínimo')}
       </div>
@@ -4064,26 +4035,17 @@
     const f = state.filters;
     const redes = getRedeOptions();
     const storesFiltered = getStoresByFilter(f);
-    const periodLabel = (f.dateFrom || f.dateTo) ? `${f.dateFrom ? formatDate(f.dateFrom) : 'início'} até ${f.dateTo ? formatDate(f.dateTo) : 'hoje'}` : 'Período geral';
-    const redeLabel = f.rede || 'Todas as redes';
-    const lojaLabel = f.loja ? (storeById(f.loja)?.nome || 'Loja selecionada') : 'Todas as lojas';
-    const tipoLabel = (!f.tipo || f.tipo === 'AMBOS') ? 'Folhagens e bandejas' : productTypeName(f.tipo);
     return `
-      <div class="filter-toggle-row enterprise-filter-toggle">
-        <button class="btn btn-ghost filter-open-btn" id="${idPrefix}Toggle">${icon('filter')} Filtros</button>
-        <div class="filter-chip-stack">
-          <span class="filter-chip">${escapeHtml(redeLabel)}</span>
-          <span class="filter-chip">${escapeHtml(lojaLabel)}</span>
-          <span class="filter-chip">${escapeHtml(periodLabel)}</span>
-          <span class="filter-chip">${escapeHtml(tipoLabel)}</span>
-        </div>
+      <div class="filter-toggle-row">
+        <button class="btn btn-ghost" id="${idPrefix}Toggle">☰ Filtros</button>
+        <span class="muted small">Clique para exibir ou ocultar os filtros disponíveis.</span>
       </div>
       <div class="filter-row collapsible-filters ${state.filterPanelsOpen[idPrefix] ? '' : 'hidden'}" id="${idPrefix}Panel">
-        <div class="filter"><span>Rede</span><select id="${idPrefix}Rede">${redes.map(r=>`<option value="${r}" ${f.rede===r?'selected':''}>${r||'Todas as redes'}</option>`).join('')}</select></div>
-        <div class="filter"><span>Loja</span><select id="${idPrefix}Loja"><option value="" ${!f.loja?'selected':''}>Todas as lojas</option>${storesFiltered.map(st=>`<option value="${st.id}" ${f.loja===st.id?'selected':''}>${st.nome}</option>`).join('')}</select></div>
-        <div class="filter"><span>De</span><input type="date" id="${idPrefix}From" value="${f.dateFrom||''}"></div>
-        <div class="filter"><span>Até</span><input type="date" id="${idPrefix}To" value="${f.dateTo||''}"></div>
-        <div class="filter"><span>Tipo</span><select id="${idPrefix}Tipo"><option value="AMBOS" ${(!f.tipo||f.tipo==='AMBOS')?'selected':''}>Ambos</option><option value="FOLHAGEM" ${f.tipo==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${f.tipo==='BANDEJA'?'selected':''}>Bandejas</option></select></div>
+        <div class="filter">Rede <select id="${idPrefix}Rede">${redes.map(r=>`<option value="${r}" ${f.rede===r?'selected':''}>${r||'Todas as redes'}</option>`).join('')}</select></div>
+        <div class="filter">Loja <select id="${idPrefix}Loja"><option value="" ${!f.loja?'selected':''}>Todas as lojas</option>${storesFiltered.map(st=>`<option value="${st.id}" ${f.loja===st.id?'selected':''}>${st.nome}</option>`).join('')}</select></div>
+        <div class="filter">De <input type="date" id="${idPrefix}From" value="${f.dateFrom||''}"></div>
+        <div class="filter">Até <input type="date" id="${idPrefix}To" value="${f.dateTo||''}"></div>
+        <div class="filter">Tipo <select id="${idPrefix}Tipo"><option value="AMBOS" ${(!f.tipo||f.tipo==='AMBOS')?'selected':''}>Ambos</option><option value="FOLHAGEM" ${f.tipo==='FOLHAGEM'?'selected':''}>Folhagens</option><option value="BANDEJA" ${f.tipo==='BANDEJA'?'selected':''}>Bandejas</option></select></div>
         ${extra}
         <button class="btn btn-primary" id="${idPrefix}Apply">Aplicar filtros</button>
       </div>`;
@@ -4188,10 +4150,10 @@
         ${clearTaskCard('Estoque baixo', fmt.format(orderSummary.lowStockStores), 'lojas com risco de falta', 'estoque-loja', orderSummary.lowStockStores ? 'red' : 'green')}
       </div>
       <div class="grid four executive-strip compact-strip">
-        ${kpi(icon('chart'),'Venda válida',money.format(metrics.vendaValida),'resultado do filtro atual')}
-        ${kpi(icon('trend'),'Quebra',money.format(metrics.quebra),'valor por custo', metrics.quebra ? 'red' : 'green')}
-        ${kpi(icon('tag'),'Ofertas ativas',fmt.format(activeOffers),'válidas hoje', activeOffers ? 'amber' : 'green')}
-        ${kpi(icon('alert'),'Lojas em atenção',fmt.format(orderSummary.attentionStores),'pedido/estoque em alerta', orderSummary.attentionStores ? 'amber' : 'green')}
+        ${kpi('▥','Venda válida',money.format(metrics.vendaValida),'resultado do filtro atual')}
+        ${kpi('↘','Quebra',money.format(metrics.quebra),'valor por custo', metrics.quebra ? 'red' : 'green')}
+        ${kpi('🏷','Ofertas ativas',fmt.format(activeOffers),'válidas hoje', activeOffers ? 'amber' : 'green')}
+        ${kpi('!','Lojas em atenção',fmt.format(orderSummary.attentionStores),'pedido/estoque em alerta', orderSummary.attentionStores ? 'amber' : 'green')}
       </div>`;
   }
 
@@ -4200,7 +4162,7 @@
       ['Importações', 'PDF/XML, Base de Vendas e Conferência', 'importar-pdf', '▣'],
       ['Comercial', 'Pedidos, preços, ofertas e análises', 'analise-pedidos', '▤'],
       ['Operação', 'Inventário, estoque, rupturas e quebras', 'inventario-saida', '▨'],
-      ['Atendimento', 'Chamados, responsáveis e resolução', 'chamados', '']
+      ['Atendimento', 'Chamados, responsáveis e resolução', 'chamados', '✉']
     ];
     return `<div class="module-grid">${modules.map(m => `
       <button class="module-card" onclick="App.go('${m[2]}')">
@@ -4348,12 +4310,12 @@
         </div>
       </div>
       <div class="grid kpis">
-        ${kpi(icon('file'),'Itens analisados',fmt.format(rows.length),'produto(s) para revisar')}
+        ${kpi('▤','Itens analisados',fmt.format(rows.length),'produto(s) para revisar')}
         ${kpi('◷','Com histórico',fmt.format(rowsWithHistory),'com venda nas datas base')}
-        ${kpi(icon('chart'),'Estoque bom',fmt.format(sum(rows.map(r=>r.stockGood))),'inventário do promotor - quebra')}
+        ${kpi('▥','Estoque bom',fmt.format(sum(rows.map(r=>r.stockGood))),'inventário do promotor - quebra')}
         ${kpi('↥','Sugestão',fmt.format(totalSuggested),'média com acréscimo','green')}
         ${kpi('✎','Pedido promotor',fmt.format(totalPromoter),'pedido enviado pela loja')}
-        ${kpi(icon('alert'),'Alertas',fmt.format(rowsAttention),'ofertas na base ou entrega',rowsAttention?'amber':'')}
+        ${kpi('!','Alertas',fmt.format(rowsAttention),'ofertas na base ou entrega',rowsAttention?'amber':'')}
       </div>
       <div class="card" style="margin-top:14px">
         <div class="panel-head">
@@ -4674,12 +4636,12 @@
     $('#viewRoot').innerHTML = `
       ${orderResultFiltersHtml(orderDate, type)}
       <div class="grid kpis order-result-kpis">
-        ${kpi(icon('file'),'Entregue hoje',fmt.format(k.delivered),'unidades','green')}
-        ${kpi(icon('alert'),'Quebra pós-entrega',fmt.format(k.breakTotal),'unidades','red')}
-        ${kpi(icon('trend'),'Saída estimada',fmt.format(k.exitTotal),'unidades','green')}
-        ${kpi(icon('boxes'),'Excesso estimado','+'+fmt.format(k.excess),'unidades','amber')}
+        ${kpi('▣','Entregue hoje',fmt.format(k.delivered),'unidades','green')}
+        ${kpi('⚠','Quebra pós-entrega',fmt.format(k.breakTotal),'unidades','red')}
+        ${kpi('↗','Saída estimada',fmt.format(k.exitTotal),'unidades','green')}
+        ${kpi('▧','Excesso estimado','+'+fmt.format(k.excess),'unidades','amber')}
         ${kpi('%','% quebra',k.breakPct.toFixed(2).replace('.',',')+'%','sobre entrega','purple')}
-        ${kpi(icon('file'),'Sem conferência',fmt.format(k.noConf),'itens','blue')}
+        ${kpi('▤','Sem conferência',fmt.format(k.noConf),'itens','blue')}
       </div>
       <div class="order-result-layout">
         <div class="card order-result-main-card">
@@ -4707,19 +4669,27 @@
 
   function dashboardStockOverview(f={}){
     const typeFilter = f.tipo && f.tipo !== 'AMBOS' ? f.tipo : '';
-    const date = f.dateTo || f.dateFrom || latestOperationalDate();
-    const rows = computeStoreStockRows({date, rede:f.rede || '', storeId:f.loja || '', type:typeFilter});
     const grouped = new Map();
+    const rows = (Store.data.inventoryOut || []).filter(r => {
+      const store = storeById(r.storeId);
+      const product = productById(r.productId);
+      return store
+        && (!f.rede || store.rede === f.rede)
+        && (!f.loja || r.storeId === f.loja)
+        && (!typeFilter || product?.tipo === typeFilter)
+        && dateInRange(r.date, f.dateFrom, f.dateTo);
+    });
     rows.forEach(r => {
-      if (!r?.store?.id) return;
-      const key = r.store.id;
-      if (!grouped.has(key)) grouped.set(key, {store:r.store, critical:0, low:0, high:0, noInventory:0, total:0});
+      const store = storeById(r.storeId);
+      if (!store?.id) return;
+      const key = store.id;
+      if (!grouped.has(key)) grouped.set(key, {store, critical:0, low:0, high:0, noInventory:0, total:0});
       const g = grouped.get(key);
+      const stock = toNumber(r.stockCurrent || 0);
       g.total += 1;
-      if (r.status === 'Risco de falta') g.critical += 1;
-      if (r.status === 'Estoque baixo') g.low += 1;
-      if (r.status === 'Estoque alto') g.high += 1;
-      if (r.status === 'Sem inventário') g.noInventory += 1;
+      if (stock <= 0) g.critical += 1;
+      else if (stock <= 3) g.low += 1;
+      else if (stock >= 80) g.high += 1;
     });
     const stores = Array.from(grouped.values()).map(g => ({
       ...g,
@@ -4777,6 +4747,31 @@
     });
   }
 
+  function quickOrderResultSummary(f={}, date=''){
+    const summary = {ok:0, excess:0, risk:0, noConf:0};
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    (Store.data.orders || []).forEach(order => {
+      const store = storeById(order.storeId);
+      if (!store) return;
+      if (f.rede && store.rede !== f.rede) return;
+      if (f.loja && order.storeId !== f.loja) return;
+      if (date && order.date !== date) return;
+      if (!date && !dateInRange(order.date, f.dateFrom, f.dateTo)) return;
+      if (!allowedTypes.includes(order.type)) return;
+      Object.values(order.lines || {}).forEach(line => {
+        const breakQty = toNumber(line?.quebraQty);
+        const stockGood = getLineInventoryGood(line || {});
+        const suggestion = toNumber(line?.suggestion);
+        const hasConference = breakQty > 0 || stockGood > 0 || String(line?.breakNote || '').trim() || line?.breakFilledAtDate || line?.breakReferenceLabel;
+        if (!hasConference) summary.noConf += 1;
+        else if (breakQty >= Math.max(5, suggestion * .18)) summary.excess += 1;
+        else if (stockGood <= 0 && breakQty <= 0 && suggestion > 0) summary.risk += 1;
+        else summary.ok += 1;
+      });
+    });
+    return summary;
+  }
+
   function computeDashboardHomeData(f={}){
     const metrics = computeMetrics(f);
     const latestDate = f.dateTo || f.dateFrom || latestOperationalDate();
@@ -4788,12 +4783,9 @@
     const pendingDup = (Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length;
     const pricePending = computePricePendingCount(latestDate);
     const criticalPending = computeCriticalRuptureAlerts({dateFrom:f.dateFrom || '', dateTo:f.dateTo || '', rede:f.rede || '', onlyPending:true}).length;
-    const typeForResult = f.tipo === 'BANDEJA' ? 'BANDEJA' : 'FOLHAGEM';
-    const resultDate = f.dateTo || latestDeliveryDateForResult();
-    const resultRows = buildOrderResultRows(resultDate, typeForResult);
-    const resultSummary = orderResultSummary(resultRows);
+    const resultSummary = quickOrderResultSummary(f, latestDate);
     const deliveries = filterDeliveriesRowsForDashboard(f);
-    const sales = filterSalesRowsForDashboard(f);
+    const sales = [];
     const notes = unique(deliveries.map(d => d.importGroupKey || d.orderNumber || d.id)).length;
     const storesCovered = unique(deliveries.map(d => d.storeId).filter(Boolean)).length;
     return {metrics, latestDate, stock, conc, openTickets, activeOffers, importIssues, pendingDup, pricePending, criticalPending, resultSummary, deliveries, sales, notes, storesCovered};
@@ -4816,102 +4808,6 @@
       <h4>${escapeHtml(title)}</h4>
       <p>${detail}</p>
     </button>`;
-  }
-
-  function enterpriseMetricCard(iconName, title, value, detail='', tone='green'){
-    return `<div class="enterprise-kpi-card ${tone}">
-      <div class="enterprise-kpi-head"><span class="enterprise-kpi-icon">${icon(iconName)}</span><span class="enterprise-spark ${tone}"></span></div>
-      <div class="enterprise-kpi-title">${escapeHtml(title)}</div>
-      <div class="enterprise-kpi-value">${value}</div>
-      <div class="enterprise-kpi-detail">${detail}</div>
-    </div>`;
-  }
-
-  function enterpriseProductRanking(title, rows, valueKey, valueFormatter, tone='green'){
-    return `<div class="card enterprise-panel enterprise-ranking-panel ${tone}">
-      <div class="panel-head"><div><h3>${escapeHtml(title)}</h3><p class="muted small">Ranking consolidado pelo filtro atual.</p></div><span class="panel-link-dot"></span></div>
-      <div class="enterprise-ranking-list">${rows.map((row, index) => `
-        <div class="enterprise-ranking-row">
-          <span class="rank-number">${index + 1}</span>
-          <div class="rank-main"><strong>${escapeHtml(row.product?.nomeSistema || 'Produto')}</strong><small>${productTypeName(row.product?.tipo || '')}</small></div>
-          <strong class="rank-value">${valueFormatter(row)}</strong>
-        </div>`).join('') || `<div class="empty">Sem dados suficientes para exibir o ranking.</div>`}</div>
-    </div>`;
-  }
-
-  function enterpriseSalesBreakChart(f={}){
-    const deliveryDates = unique((Store.data.deliveries || []).filter(d => {
-      const s = storeById(d.storeId);
-      const p = productById(d.productId);
-      return (!f.rede || s?.rede === f.rede)
-        && (!f.loja || d.storeId === f.loja)
-        && (!p || selectedTypes(f.tipo || 'AMBOS').includes(p.tipo))
-        && dateInRange(d.date, f.dateFrom, f.dateTo);
-    }).map(d=>d.date)).sort().slice(-12);
-    if (!deliveryDates.length) return `<div class="empty">Não há XML/PDF importado para os filtros atuais.</div>`;
-    const values = deliveryDates.map(date => {
-      const m = computeMetrics({...f, dateFrom:date, dateTo:date});
-      return {date, venda:m.vendaValida, quebra:m.quebra};
-    });
-    const maxVenda = Math.max(...values.map(v=>v.venda), 1);
-    const maxQuebra = Math.max(...values.map(v=>v.quebra), 1);
-    return `<div class="enterprise-chart">
-      <div class="enterprise-chart-legend"><span class="sales-dot">Venda (R$)</span><span class="break-dot">Quebra (R$)</span></div>
-      <div class="enterprise-chart-bars">${values.map((v, idx) => {
-        const barH = Math.max(12, Math.round((v.venda / maxVenda) * 170));
-        const dotBottom = Math.max(18, Math.round((v.quebra / maxQuebra) * 160));
-        return `<div class="enterprise-chart-col"><span class="chart-bar" style="height:${barH}px"></span><i class="chart-dot" style="bottom:${dotBottom}px"></i><small>${formatDateShort(v.date)}</small></div>`;
-      }).join('')}</div>
-      <div class="enterprise-chart-footer">
-        <div><span>Venda total no período</span><strong class="positive">${money.format(sum(values.map(v=>v.venda)))}</strong></div>
-        <div><span>Quebra total no período</span><strong class="warning-text">${money.format(sum(values.map(v=>v.quebra)))}</strong></div>
-        <div><span>% Quebra no período</span><strong>${sum(values.map(v=>v.venda)) ? ((sum(values.map(v=>v.quebra)) / sum(values.map(v=>v.venda))) * 100).toFixed(2).replace('.',',') + '%' : '0,00%'}</strong></div>
-      </div>
-    </div>`;
-  }
-
-  function enterpriseAttentionTable(stockSummary){
-    const rows = (stockSummary?.stores || []).filter(r => r.attention > 0).slice(0, 5);
-    if (!rows.length) return `<div class="empty">Nenhuma loja com alerta relevante no filtro atual.</div>`;
-    return `<div class="enterprise-mini-table"><table><thead><tr><th>#</th><th>Loja</th><th class="num">Alertas</th><th>Status</th></tr></thead><tbody>${rows.map((r, i) => {
-      const critical = r.critical + r.low;
-      const status = critical ? ['Crítico','red'] : r.high ? ['Alerta','amber'] : ['Atenção','blue'];
-      return `<tr><td>${i+1}</td><td><strong>${escapeHtml(r.store.nome || '')}</strong><small>${escapeHtml(r.store.rede || '')}</small></td><td class="num">${fmt.format(r.attention)}</td><td><span class="badge ${status[1]}">${status[0]}</span></td></tr>`;
-    }).join('')}</tbody></table></div><button class="enterprise-panel-action" onclick="App.go('estoque-loja')">Ver todas as lojas</button>`;
-  }
-
-  function enterpriseOrderDonut(data){
-    const items = [
-      ['Aprovados', toNumber(data.resultSummary.ok), 'green'],
-      ['Em análise', toNumber(data.resultSummary.noConf), 'blue'],
-      ['Pendentes', toNumber(data.resultSummary.risk), 'amber'],
-      ['Com divergência', toNumber(data.resultSummary.excess), 'red']
-    ];
-    const total = Math.max(1, sum(items.map(i=>i[1])));
-    let acc = 0;
-    const stops = items.map(([label, val, tone]) => {
-      const start = (acc/total)*100;
-      acc += val;
-      const end = (acc/total)*100;
-      const color = tone === 'green' ? 'var(--green)' : tone === 'blue' ? 'var(--blue)' : tone === 'amber' ? 'var(--amber)' : 'var(--red)';
-      return `${color} ${start}% ${end}%`;
-    }).join(', ');
-    return `<div class="enterprise-donut-wrap">
-      <div class="enterprise-donut" style="background:conic-gradient(${stops || 'var(--green) 0 100%'});"><span>Total<strong>${fmt.format(total === 1 && !sum(items.map(i=>i[1])) ? 0 : total)}</strong></span></div>
-      <div class="enterprise-donut-legend">${items.map(([label,val,tone]) => `<div><i class="legend-dot ${tone}"></i><span>${escapeHtml(label)}</span><strong>${fmt.format(val)}</strong></div>`).join('')}</div>
-    </div><button class="enterprise-panel-action" onclick="App.go('resultado-pedido')">Ver análise completa</button>`;
-  }
-
-  function enterpriseRecentImports(){
-    const deliveryGroups = new Map();
-    (Store.data.deliveries || []).forEach(d => {
-      const key = d.importBatchId || `${d.fileName || 'Importação'}|${d.importedAt || ''}`;
-      if (!deliveryGroups.has(key)) deliveryGroups.set(key, {fileName:d.fileName || 'XML/PDF importado', type:(d.sourceType || (String(d.fileName||'').toLowerCase().endsWith('.xml') ? 'XML' : 'PDF')), importedAt:d.importedAt || d.createdAt || d.date || '', status:'Sucesso'});
-    });
-    const sales = (Store.data.salesImports || []).map(i => ({fileName:i.fileName || 'Base de venda', type:'Excel', importedAt:i.importedAt || '', status:toNumber(i.records) > 0 ? 'Sucesso' : 'Conferir'}));
-    const rows = [...deliveryGroups.values(), ...sales].sort((a,b)=>String(b.importedAt||'').localeCompare(String(a.importedAt||''))).slice(0,5);
-    if (!rows.length) return `<div class="empty">Nenhuma importação registrada ainda.</div>`;
-    return `<div class="enterprise-mini-table recent-imports"><table><thead><tr><th>Arquivo</th><th>Tipo</th><th>Data/Hora</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><strong title="${escapeHtml(r.fileName)}">${escapeHtml(String(r.fileName).slice(0,54))}${String(r.fileName).length>54?'…':''}</strong></td><td>${escapeHtml(r.type || '—')}</td><td>${r.importedAt ? formatDateTime(r.importedAt) : '—'}</td><td><span class="badge ${r.status === 'Sucesso' ? 'green' : 'amber'}">${escapeHtml(r.status)}</span></td></tr>`).join('')}</tbody></table></div><button class="enterprise-panel-action" onclick="App.go('importar-pdf')">Ver todas as importações</button>`;
   }
 
   function renderDashboardAttentionList(stockSummary){
@@ -4957,65 +4853,71 @@
   }
 
   function renderDashboard(){
-    setTitle('Central Comercial Só Folhas', 'Venda, quebra, estoque, pedidos e inteligência operacional.');
+    setTitle('Dashboard Inicial', 'Resumo executivo da operação comercial com foco em decisão rápida.');
     const f = state.filters;
     if (!f.tipo) f.tipo = 'AMBOS';
     const data = computeDashboardHomeData(f);
-    const metrics = data.metrics;
-    const breakPct = metrics.vendaValida > 0 ? (metrics.quebra / metrics.vendaValida) * 100 : 0;
-    const productRows = computePresentationProductStats(f);
-    const soldRows = rankingRows(productRows, 'salesQty', {limit:5, positiveOnly:true});
-    const breakRows = rankingRows(productRows, 'breakQty', {limit:5, positiveOnly:true});
-    const pendingOrders = toNumber(data.resultSummary.risk) + toNumber(data.resultSummary.excess) + toNumber(data.resultSummary.noConf);
-    const divergenceCount = toNumber(data.importIssues) + toNumber(data.pendingDup);
-    const periodLabel = (f.dateFrom || f.dateTo) ? `${f.dateFrom ? formatDate(f.dateFrom) : 'início'} até ${f.dateTo ? formatDate(f.dateTo) : 'hoje'}` : 'Geral';
+    const breakPct = data.metrics.vendaValida > 0 ? (data.metrics.quebra / data.metrics.vendaValida) * 100 : 0;
     $('#viewRoot').innerHTML = `
-      <section class="enterprise-dashboard dashboard-shell">
-        <div class="enterprise-dashboard-head">
+      <section class="dashboard-shell">
+        <div class="card exec-hero-card">
           <div>
-            <span class="eyebrow">Sistema enterprise</span>
-            <h1>Central Comercial Só Folhas</h1>
-            <p>Venda, quebra, estoque, pedidos e inteligência operacional em um painel executivo único.</p>
+            <span class="eyebrow">Visão executiva</span>
+            <h1>Dashboard inicial</h1>
+            <p>Resumo consolidado para acompanhar resultado, estoque, importações e pontos de atenção sem poluição visual.</p>
+            <div class="hero-status-row">
+              <span class="status-chip">Período: ${escapeHtml((f.dateFrom || f.dateTo) ? `${f.dateFrom ? formatDate(f.dateFrom) : 'início'} até ${f.dateTo ? formatDate(f.dateTo) : 'hoje'}` : 'geral')}</span>
+              <span class="status-chip ${data.stock.attentionStores ? 'amber' : 'green'}">${data.stock.attentionStores ? `${fmt.format(data.stock.attentionStores)} loja(s) em atenção` : 'Sem alerta crítico por loja'}</span>
+            </div>
           </div>
-          <div class="enterprise-dashboard-status">
-            <span class="system-chip cloud-chip">Firebase conectado</span>
-            <span class="system-chip updated-chip">Base atualizada</span>
-            <span class="system-chip">Período: ${escapeHtml(periodLabel)}</span>
+          <div class="exec-hero-actions">
+            <button class="btn btn-soft" onclick="App.go('dashboard-apresentacao')">◫ Dashboard apresentação</button>
+            <button class="btn btn-primary" onclick="App.go('analise-pedidos')">▤ Ir para pedidos</button>
           </div>
         </div>
 
-        <div class="card exec-filters-card enterprise-filter-card">${adminFiltersHtml('dash')}</div>
+        <div class="card exec-filters-card">${adminFiltersHtml('dash')}</div>
 
-        <div class="enterprise-kpi-grid">
-          ${enterpriseMetricCard('chart','Venda acumulada', money.format(metrics.vendaValida), 'resultado válido no período', 'green')}
-          ${enterpriseMetricCard('boxes','Quebra acumulada', money.format(metrics.quebra), `${breakPct.toFixed(2).replace('.',',')}% sobre a venda`, metrics.quebra ? 'amber' : 'green')}
-          ${enterpriseMetricCard('percent','% Quebra', `${breakPct.toFixed(2).replace('.',',')}%`, breakPct > 10 ? 'acima do limite ideal' : 'índice sob controle', breakPct > 10 ? 'red' : breakPct > 5 ? 'amber' : 'blue')}
-          ${enterpriseMetricCard('alert','Lojas em atenção', fmt.format(data.stock.attentionStores), `${fmt.format(data.stock.lowStockStores)} com estoque baixo/risco`, data.stock.attentionStores ? 'purple' : 'green')}
-          ${enterpriseMetricCard('cart','Pedidos pendentes', fmt.format(pendingOrders), 'itens pendentes, em análise ou divergentes', pendingOrders ? 'orange' : 'green')}
-          ${enterpriseMetricCard('scale','Divergências', fmt.format(divergenceCount), 'importações e duplicidades pendentes', divergenceCount ? 'red' : 'green')}
+        <div class="exec-metric-grid">
+          ${execMetricCard('▥','Venda acumulada', money.format(data.metrics.vendaValida), 'venda válida no período', 'green')}
+          ${execMetricCard('↘','Quebra acumulada', money.format(data.metrics.quebra), `${breakPct.toFixed(2).replace('.',',')}% sobre a venda`, data.metrics.quebra ? 'red' : 'green')}
+          ${execMetricCard('⚠','Lojas em atenção', fmt.format(data.stock.attentionStores), `${fmt.format(data.stock.lowStockStores)} com estoque baixo/risco`, data.stock.attentionStores ? 'amber' : 'green')}
+          ${execMetricCard('✓','Entregas importadas', fmt.format(data.notes), `${fmt.format(data.storesCovered)} loja(s) cobertas`, 'blue')}
         </div>
 
-        <div class="enterprise-main-grid">
-          <div class="card enterprise-panel enterprise-chart-panel">
-            <div class="panel-head"><div><h3>Venda x Quebra</h3><p class="muted small">Comparativo por data de entrega no filtro atual.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('analises')">Abrir análise</button></div>
-            ${enterpriseSalesBreakChart(f)}
-          </div>
-          <div class="card enterprise-panel">
-            <div class="panel-head"><div><h3>Lojas com atenção</h3><p class="muted small">Ranking operacional por alertas de estoque.</p></div><span class="panel-link-dot"></span></div>
-            ${enterpriseAttentionTable(data.stock)}
-          </div>
-          ${enterpriseProductRanking('Top itens mais vendidos', soldRows, 'salesQty', row => fmt.format(Math.round(toNumber(row.salesQty))), 'green')}
+        <div class="exec-action-grid">
+          ${execActionCard('✓','Fechamento do dia', data.latestDate ? formatDate(data.latestDate) : '—', 'Conferir rotina operacional da data.', 'fechamento-dia', 'green')}
+          ${execActionCard('◈','Conciliação', fmt.format(data.conc.redes), 'Redes com base de venda já conciliada.', 'conciliacao', data.conc.redes ? 'blue' : 'amber')}
+          ${execActionCard('🏷','Ofertas e preços', fmt.format(data.activeOffers + data.pricePending), `${fmt.format(data.activeOffers)} oferta(s) e ${fmt.format(data.pricePending)} preço(s) pendente(s).`, 'ofertas', (data.activeOffers || data.pricePending) ? 'amber' : 'green')}
+          ${execActionCard('✉','Chamados / divergências', fmt.format(data.openTickets + data.importIssues + data.pendingDup), 'Chamados, divergências e duplicidades para tratar.', 'chamados', (data.openTickets || data.importIssues || data.pendingDup) ? 'amber' : 'green')}
         </div>
 
-        <div class="enterprise-bottom-grid">
-          ${enterpriseProductRanking('Itens com maiores quebras', breakRows, 'breakQty', row => fmt.format(Math.round(toNumber(row.breakQty))), 'red')}
-          <div class="card enterprise-panel">
-            <div class="panel-head"><div><h3>Análise rápida de pedidos</h3><p class="muted small">Resumo do módulo Resultado do Pedido.</p></div><span class="panel-link-dot"></span></div>
-            ${enterpriseOrderDonut(data)}
+        <div class="exec-panel-grid">
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Lojas com maior atenção</h3><p class="muted small">Baseado no estoque em loja e no inventário já lançado.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('estoque-loja')">Ver estoque</button></div>
+            ${renderDashboardAttentionList(data.stock)}
           </div>
-          <div class="card enterprise-panel">
-            <div class="panel-head"><div><h3>Importações recentes</h3><p class="muted small">XML, PDF e bases registradas no sistema.</p></div><span class="panel-link-dot"></span></div>
-            ${enterpriseRecentImports()}
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Resultado do pedido</h3><p class="muted small">Resumo consolidado do módulo de resultado do pedido.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('resultado-pedido')">Abrir módulo</button></div>
+            ${renderDashboardResultSummary(data)}
+          </div>
+        </div>
+
+        <div class="exec-panel-grid">
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Resumo operacional</h3><p class="muted small">Indicadores auxiliares para tomada de decisão.</p></div></div>
+            ${renderDashboardResume(data)}
+          </div>
+          <div class="card exec-panel">
+            <div class="panel-head"><div><h3>Atalhos rápidos</h3><p class="muted small">Acesse direto as áreas mais usadas do sistema.</p></div></div>
+            <div class="exec-shortcuts">
+              <button class="btn btn-soft" onclick="App.go('importar-pdf')">▣ Importar XML/PDF</button>
+              <button class="btn btn-soft" onclick="App.go('bases')">▤ Base de vendas</button>
+              <button class="btn btn-soft" onclick="App.go('analise-pedidos')">▤ Pedidos</button>
+              <button class="btn btn-soft" onclick="App.go('resultado-pedido')">◬ Resultado do pedido</button>
+              <button class="btn btn-soft" onclick="App.go('rupturas')">⚠ Rupturas</button>
+              <button class="btn btn-soft" onclick="App.go('historico')">↺ Histórico</button>
+            </div>
           </div>
         </div>
       </section>`;
@@ -5105,10 +5007,10 @@
         <div class="card exec-filters-card">${adminFiltersHtml('tvdash')}</div>
 
         <div class="tv-summary-grid">
-          ${execMetricCard(icon('chart'),'Venda acumulada', money.format(metrics.vendaValida), `${fmt.format(salesQtyTotal)} un vendidas`, 'green')}
-          ${execMetricCard(icon('trend'),'Quebra acumulada', money.format(metrics.quebra), `${fmt.format(breakQtyTotal)} un quebradas`, metrics.quebra ? 'red' : 'green')}
+          ${execMetricCard('▥','Venda acumulada', money.format(metrics.vendaValida), `${fmt.format(salesQtyTotal)} un vendidas`, 'green')}
+          ${execMetricCard('↘','Quebra acumulada', money.format(metrics.quebra), `${fmt.format(breakQtyTotal)} un quebradas`, metrics.quebra ? 'red' : 'green')}
           ${execMetricCard('%','% quebra', `${breakPct.toFixed(2).replace('.',',')}%`, 'quebra sobre venda válida', breakPct > 10 ? 'red' : breakPct > 5 ? 'amber' : 'green')}
-          ${execMetricCard(icon('leaf'),'Itens com movimento', fmt.format(productRows.filter(r => r.salesQty > 0 || r.breakQty > 0).length), 'produtos com venda ou quebra', 'blue')}
+          ${execMetricCard('◌','Itens com movimento', fmt.format(productRows.filter(r => r.salesQty > 0 || r.breakQty > 0).length), 'produtos com venda ou quebra', 'blue')}
         </div>
 
         <div class="tv-grid">
@@ -5162,12 +5064,12 @@
     $('#viewRoot').innerHTML = `
       ${adminFiltersHtml('filter')}
       <div class="grid kpis">
-        ${kpi(icon('chart'),'Venda válida',money.format(metrics.vendaValida),'PDF - faltas - qualidade')}
-        ${kpi(icon('trend'),'Quebra',money.format(metrics.quebra),'custo da última entrega','red')}
+        ${kpi('▥','Venda válida',money.format(metrics.vendaValida),'PDF - faltas - qualidade')}
+        ${kpi('↘','Quebra',money.format(metrics.quebra),'custo da última entrega','red')}
         ${kpi('%','% Quebra',metrics.vendaValida?((metrics.quebra/metrics.vendaValida)*100).toFixed(2).replace('.',',')+'%':'0,00%','sobre venda válida','amber')}
-        ${kpi(icon('alert'),'Faltas R$',money.format(metrics.faltas),'abatidas da entrega','red')}
-        ${kpi(icon('diamond'),'Qualidade R$',money.format(metrics.qualidade),'devolução/descartes','amber')}
-        ${kpi(icon('alert'),'Rupturas',computeRuptures(f).length,'ativas no mix','purple')}
+        ${kpi('!','Faltas R$',money.format(metrics.faltas),'abatidas da entrega','red')}
+        ${kpi('◇','Qualidade R$',money.format(metrics.qualidade),'devolução/descartes','amber')}
+        ${kpi('⚠','Rupturas',computeRuptures(f).length,'ativas no mix','purple')}
       </div>
       <div class="grid two">
         <div class="card chart-panel">
@@ -5267,9 +5169,9 @@
     const activeToday = (Store.data.offers || []).filter(o => offerIsActiveOn(o, todayISO())).length;
     $('#viewRoot').innerHTML = `
       <div class="grid three">
-        ${kpi(icon('tag'),'Ofertas cadastradas',(Store.data.offers || []).length,'total no sistema','amber')}
-        ${kpi(icon('check'),'Ofertas hoje',activeToday,'ativas na data de hoje')}
-        ${kpi(icon('chart'),'Mês selecionado',rows.length,'ofertas que passam pelo mês filtrado')}
+        ${kpi('🏷','Ofertas cadastradas',(Store.data.offers || []).length,'total no sistema','amber')}
+        ${kpi('✓','Ofertas hoje',activeToday,'ativas na data de hoje')}
+        ${kpi('▥','Mês selecionado',rows.length,'ofertas que passam pelo mês filtrado')}
       </div>
 
       <div class="grid two" style="margin-top:14px">
@@ -5318,7 +5220,7 @@
         <div class="card">
           <h3>Como a ressalva aparece</h3>
           <div class="offer-preview">
-            <strong>Item em oferta nesta data</strong>
+            <strong>🏷 Item em oferta nesta data</strong>
             <span>Produto X por R$ 3,49 • período: 04/04/2026 a 07/04/2026</span>
             <small>Essa informação aparece na linha do item para o promotor e nas análises do comercial, respeitando a rede e as lojas selecionadas.</small>
           </div>
@@ -5633,9 +5535,9 @@
       <div class="grid kpis" style="margin-top:14px">
         ${kpi('$','Valor importado',money.format(audit.total.valido),'venda válida no filtro')}
         ${kpi('↔','Diferença',audit.total.expected ? money.format(audit.total.diff) : 'Informe valor esperado',audit.total.expected ? 'esperado - importado' : 'para comparar',diffType)}
-        ${kpi(icon('chart'),'Valor bruto NF',money.format(audit.total.bruto),'antes de faltas/qualidade')}
-        ${kpi(icon('file'),'Notas / lojas',`${fmt.format(audit.total.notes)} / ${fmt.format(audit.total.stores)}`,`${fmt.format(audit.total.files)} arquivo(s)`)}
-        ${kpi(icon('alert'),'Divergências',fmt.format(audit.issues.length),'itens para conferir',audit.issues.length?'red':'green')}
+        ${kpi('▥','Valor bruto NF',money.format(audit.total.bruto),'antes de faltas/qualidade')}
+        ${kpi('▣','Notas / lojas',`${fmt.format(audit.total.notes)} / ${fmt.format(audit.total.stores)}`,`${fmt.format(audit.total.files)} arquivo(s)`)}
+        ${kpi('⚠','Divergências',fmt.format(audit.issues.length),'itens para conferir',audit.issues.length?'red':'green')}
         ${kpi('−','Abates',money.format(audit.total.falta + audit.total.qualidade),'faltas + qualidade','amber')}
       </div>
 
@@ -7434,10 +7336,10 @@
     const salesPending = pending.filter(d => d.scope === 'SALES');
     $('#viewRoot').innerHTML = `
       <div class="grid kpis">
-        ${kpi(icon('diamond'),'Pendentes',fmt.format(pending.length),'aguardando decisão', pending.length ? 'amber' : 'green')}
-        ${kpi(icon('file'),'XML/PDF',fmt.format(deliveryPending.length),'notas duplicadas')}
-        ${kpi(icon('file'),'Base de Vendas',fmt.format(salesPending.length),'períodos conflitantes')}
-        ${kpi(icon('check'),'Resolvidas',fmt.format(rows.length - pending.length),'decididas pelo operador')}
+        ${kpi('⧉','Pendentes',fmt.format(pending.length),'aguardando decisão', pending.length ? 'amber' : 'green')}
+        ${kpi('▣','XML/PDF',fmt.format(deliveryPending.length),'notas duplicadas')}
+        ${kpi('▤','Base de Vendas',fmt.format(salesPending.length),'períodos conflitantes')}
+        ${kpi('✓','Resolvidas',fmt.format(rows.length - pending.length),'decididas pelo operador')}
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -8272,12 +8174,12 @@
         <div class="filter">Loja <select id="mqStore">${stores.map(s=>`<option value="${s.id}" ${s.id===selectedStore?'selected':''}>${s.nome}</option>`).join('')}</select></div>
       </div>
       <div class="grid kpis">
-        ${kpi(icon('alert'),'Valor faltas',money.format(rows.reduce((a,d)=>a+toNumber(d.faltaQty)*toNumber(d.unitCost),0)),'no filtro','red')}
-        ${kpi(icon('diamond'),'Valor qualidade',money.format(rows.reduce((a,d)=>a+toNumber(d.qualidadeQty)*toNumber(d.unitCost),0)),'no filtro','amber')}
-        ${kpi(icon('chart'),'Entrega PDF',fmt.format(rows.reduce((a,d)=>a+toNumber(d.qtyPdf),0)),'unidades')}
-        ${kpi(icon('check'),'Entrega válida',fmt.format(rows.reduce((a,d)=>a+validQty(d),0)),'unidades')}
+        ${kpi('!','Valor faltas',money.format(rows.reduce((a,d)=>a+toNumber(d.faltaQty)*toNumber(d.unitCost),0)),'no filtro','red')}
+        ${kpi('◇','Valor qualidade',money.format(rows.reduce((a,d)=>a+toNumber(d.qualidadeQty)*toNumber(d.unitCost),0)),'no filtro','amber')}
+        ${kpi('▥','Entrega PDF',fmt.format(rows.reduce((a,d)=>a+toNumber(d.qtyPdf),0)),'unidades')}
+        ${kpi('✓','Entrega válida',fmt.format(rows.reduce((a,d)=>a+validQty(d),0)),'unidades')}
         ${kpi('$','Venda válida',money.format(rows.reduce((a,d)=>a+validValue(d),0)),'após abates')}
-        ${kpi(icon('boxes'),'Itens',rows.length,'itens no filtro')}
+        ${kpi('▧','Itens',rows.length,'itens no filtro')}
       </div>
       <div class="card">
         <h3>Lançar falta / qualidade</h3>
@@ -8520,7 +8422,7 @@
     return `<div class="card critical-rupture-card">
       <div class="panel-head">
         <div>
-          <h3>Crítico Alerta de itens obrigatórios sem entrega</h3>
+          <h3>🚨 Alerta de itens obrigatórios sem entrega</h3>
           <p class="muted">Itens críticos que não podem ficar sem entrega. Enquanto o comercial não justificar, o alerta permanece pendente.</p>
         </div>
         <div class="actions">
@@ -8638,9 +8540,9 @@
     $('#viewRoot').innerHTML = `
       ${adminFiltersHtml('rupt', extra)}
       <div class="grid kpis">
-        ${kpi(icon('alert'),'Itens obrigatórios pendentes',pendingCritical,'precisam de justificativa comercial',pendingCritical?'red':'')}
-        ${kpi(icon('leaf'),'Itens críticos',criticalRuptureProductCount(f),'monitorados por rede')}
-        ${kpi(icon('alert'),'Rupturas gerais',rows.filter(r=>r.status==='RUPTURA').length,'mix ativo sem estoque/pedido','amber')}
+        ${kpi('🚨','Itens obrigatórios pendentes',pendingCritical,'precisam de justificativa comercial',pendingCritical?'red':'')}
+        ${kpi('☘','Itens críticos',criticalRuptureProductCount(f),'monitorados por rede')}
+        ${kpi('⚠','Rupturas gerais',rows.filter(r=>r.status==='RUPTURA').length,'mix ativo sem estoque/pedido','amber')}
       </div>
       ${renderCriticalRuptureAlerts(criticalRows)}
       <div class="card"><h3>Alertas de ruptura geral</h3><p class="muted small">Produtos ativos no mix, sem inventário bom e sem pedido da loja.</p><div class="table-wrap"><table>
@@ -8878,9 +8780,9 @@
     const resolved = all.filter(t => t.status === 'RESOLVIDO').length;
     $('#viewRoot').innerHTML = `
       <div class="grid three">
-        ${kpi('','Chamados abertos',open,'aguardando aceite','amber')}
+        ${kpi('✉','Chamados abertos',open,'aguardando aceite','amber')}
         ${kpi('↻','Em atendimento',inProgress,'com responsável definido','blue')}
-        ${kpi(icon('check'),'Resolvidos',resolved,'finalizados','')}
+        ${kpi('✓','Resolvidos',resolved,'finalizados','')}
       </div>
       <div class="card" style="margin-top:14px">
         <div class="view-head" style="margin-bottom:12px">
@@ -9483,7 +9385,7 @@
       if (isBackofficeUser()) return;
       state.mobileMode = !state.mobileMode;
       document.body.classList.toggle('store-mobile', state.mobileMode);
-      $('#mobileModeBtn').textContent = state.mobileMode ? ' Fechar modo mobile' : ' Abrir modo mobile';
+      $('#mobileModeBtn').textContent = state.mobileMode ? '🖥️ Fechar modo mobile' : '📱 Abrir modo mobile';
       toast(state.mobileMode ? 'Modo mobile ativado para acesso pelo celular.' : 'Modo mobile desativado.');
     });
     document.addEventListener('click', e=>{
@@ -10187,7 +10089,7 @@
         ${kpi('∑','Soma com venda',fmt.format(calc.total || 0),`${fmt.format(calc.daysWithSales || 0)} dia(s) com venda`)}
         ${kpi('÷','Média',fmt.format(calc.average || 0),`${fmt.format(calc.selectedCount || 0)} data(s) selecionada(s)`)}
         ${kpi('%','Aumento',`${String(pct).replace('.',',')}%`,'aplicado sobre a média')}
-        ${kpi(icon('check'),'Sugestão final',fmt.format(calc.suggestion || 0),'arredondada para cima')}
+        ${kpi('✓','Sugestão final',fmt.format(calc.suggestion || 0),'arredondada para cima')}
       </div>
       ${calc.missingDates?.length ? `<div class="alert-list"><div><strong>Atenção:</strong> sem venda em ${fmt.format(calc.missingDates.length)} data(s): ${calc.missingDates.map(formatDate).join(', ')}. Essas datas não entram na divisão.</div></div>` : ''}
       <div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Data</th><th class="num">Venda</th><th>Entra na média?</th></tr></thead><tbody>${(calc.detail||[]).map(d=>`<tr><td>${formatDate(d.date)}</td><td class="num">${fmt.format(d.qty)}</td><td>${d.qty>0?'<span class="badge green">Sim</span>':'<span class="badge gray">Não</span>'}</td></tr>`).join('') || `<tr><td colspan="3" class="center muted">Selecione datas para simular.</td></tr>`}</tbody></table></div>
@@ -10226,10 +10128,10 @@
     const unmatchedProducts = totalRows.filter(r=>!r.productId).length;
     $('#viewRoot').innerHTML = `
       <div class="grid kpis">
-        ${kpi(icon('file'),'Bases importadas',fmt.format(imports.length),'arquivos Excel')}
-        ${kpi(icon('chart'),'Registros',fmt.format(totalRows.length),'linhas de venda')}
+        ${kpi('▤','Bases importadas',fmt.format(imports.length),'arquivos Excel')}
+        ${kpi('▥','Registros',fmt.format(totalRows.length),'linhas de venda')}
         ${kpi('∑','Qtd vendida',fmt.format(totalQty),'unidades')}
-        ${kpi(icon('alert'),'Pendências',fmt.format(unmatchedStores + unmatchedProducts),'lojas/produtos não reconhecidos', unmatchedStores + unmatchedProducts ? 'amber' : 'green')}
+        ${kpi('!','Pendências',fmt.format(unmatchedStores + unmatchedProducts),'lojas/produtos não reconhecidos', unmatchedStores + unmatchedProducts ? 'amber' : 'green')}
       </div>
       <div class="panel">
         <div class="panel-head">
