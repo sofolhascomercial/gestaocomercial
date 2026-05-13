@@ -66,6 +66,128 @@
   const fmt = new Intl.NumberFormat('pt-BR');
   const money = new Intl.NumberFormat('pt-BR', {style:'currency', currency:'BRL'});
 
+  // Índices leves em memória para evitar varrer sales/deliveries/orders a cada linha renderizada.
+  // Eles são reconstruídos automaticamente quando o tamanho das listas muda.
+  const PERF_CACHE = { signature:'', indexes:null };
+
+  function perfDataSignature(){
+    const data = Store?.data || {};
+    return [
+      (data.products || []).length,
+      (data.stores || []).length,
+      (data.sales || []).length,
+      (data.deliveries || []).length,
+      (data.orders || []).length,
+      (data.inventoryOut || []).length,
+      (data.offers || []).length,
+      data._updatedAt || ''
+    ].join('|');
+  }
+
+  function invalidatePerfCaches(){
+    PERF_CACHE.signature = '';
+    PERF_CACHE.indexes = null;
+  }
+
+  function getPerfIndexes(){
+    const data = Store?.data || {};
+    const signature = perfDataSignature();
+    if (PERF_CACHE.indexes && PERF_CACHE.signature === signature) return PERF_CACHE.indexes;
+
+    const productsById = new Map((data.products || []).map(p => [p.id, p]));
+    const storesById = new Map((data.stores || []).map(st => [st.id, st]));
+    const defaultStoresById = new Map((window.DEFAULT_STORES || []).map(st => [st.id, st]));
+    const deliveriesByDuplicateKey = new Map();
+    const deliveryQtyByStoreProductDate = new Map();
+    const deliveryValueByStoreProductDate = new Map();
+    const latestCostByStoreProduct = new Map();
+    const deliveryDatesByStoreProduct = new Map();
+
+    (data.deliveries || []).forEach(d => {
+      const duplicateKey = deliveryDuplicateKeyFromRow(d);
+      if (duplicateKey) {
+        const list = deliveriesByDuplicateKey.get(duplicateKey) || [];
+        list.push(d);
+        deliveriesByDuplicateKey.set(duplicateKey, list);
+      }
+      const baseKey = `${d.storeId}|${d.productId}|${d.date}`;
+      deliveryQtyByStoreProductDate.set(baseKey, (deliveryQtyByStoreProductDate.get(baseKey) || 0) + validQty(d));
+      deliveryValueByStoreProductDate.set(baseKey, (deliveryValueByStoreProductDate.get(baseKey) || 0) + validValue(d));
+      const spKey = `${d.storeId}|${d.productId}`;
+      const cost = toNumber(d.unitCost);
+      if (cost > 0) {
+        const old = latestCostByStoreProduct.get(spKey);
+        if (!old || String(d.date || '') >= String(old.date || '')) latestCostByStoreProduct.set(spKey, {date:d.date || '', cost});
+      }
+      if (d.date) {
+        const set = deliveryDatesByStoreProduct.get(spKey) || new Set();
+        set.add(d.date);
+        deliveryDatesByStoreProduct.set(spKey, set);
+      }
+    });
+
+    const salesQtyByStoreProductDate = new Map();
+    (data.sales || []).forEach(r => {
+      const key = `${r.storeId}|${r.productId}|${r.date}`;
+      salesQtyByStoreProductDate.set(key, (salesQtyByStoreProductDate.get(key) || 0) + toNumber(r.qty));
+    });
+
+    const ordersByStoreTypeDate = new Map();
+    const breakQtyByStoreProductDate = new Map();
+    (data.orders || []).forEach(order => {
+      ordersByStoreTypeDate.set(`${order.storeId}|${order.type}|${order.date}`, order);
+      Object.entries(order.lines || {}).forEach(([productId, line]) => {
+        const key = `${order.storeId}|${productId}|${order.date}`;
+        breakQtyByStoreProductDate.set(key, (breakQtyByStoreProductDate.get(key) || 0) + toNumber(line?.quebraQty));
+      });
+    });
+
+    const latestInventoryByStoreProduct = new Map();
+    (data.inventoryOut || []).forEach(r => {
+      const key = `${r.storeId}|${r.productId}`;
+      const old = latestInventoryByStoreProduct.get(key);
+      const currentSort = `${r.date || ''}|${r.updatedAt || r.createdAt || ''}`;
+      const oldSort = old ? `${old.date || ''}|${old.updatedAt || old.createdAt || ''}` : '';
+      if (!old || currentSort >= oldSort) latestInventoryByStoreProduct.set(key, r);
+    });
+
+    PERF_CACHE.signature = signature;
+    PERF_CACHE.indexes = {
+      productsById, storesById, defaultStoresById, deliveriesByDuplicateKey,
+      deliveryQtyByStoreProductDate, deliveryValueByStoreProductDate, latestCostByStoreProduct, deliveryDatesByStoreProduct,
+      salesQtyByStoreProductDate, ordersByStoreTypeDate, breakQtyByStoreProductDate, latestInventoryByStoreProduct
+    };
+    return PERF_CACHE.indexes;
+  }
+
+  function appendDeliveryRowsToPerfCache(rows=[]){
+    const idx = PERF_CACHE.indexes;
+    if (!idx || !Array.isArray(rows) || !rows.length) return;
+    rows.forEach(d => {
+      const duplicateKey = deliveryDuplicateKeyFromRow(d);
+      if (duplicateKey) {
+        const list = idx.deliveriesByDuplicateKey.get(duplicateKey) || [];
+        list.push(d);
+        idx.deliveriesByDuplicateKey.set(duplicateKey, list);
+      }
+      const baseKey = `${d.storeId}|${d.productId}|${d.date}`;
+      idx.deliveryQtyByStoreProductDate.set(baseKey, (idx.deliveryQtyByStoreProductDate.get(baseKey) || 0) + validQty(d));
+      idx.deliveryValueByStoreProductDate.set(baseKey, (idx.deliveryValueByStoreProductDate.get(baseKey) || 0) + validValue(d));
+      const spKey = `${d.storeId}|${d.productId}`;
+      const cost = toNumber(d.unitCost);
+      if (cost > 0) {
+        const old = idx.latestCostByStoreProduct.get(spKey);
+        if (!old || String(d.date || '') >= String(old.date || '')) idx.latestCostByStoreProduct.set(spKey, {date:d.date || '', cost});
+      }
+      if (d.date) {
+        const set = idx.deliveryDatesByStoreProduct.get(spKey) || new Set();
+        set.add(d.date);
+        idx.deliveryDatesByStoreProduct.set(spKey, set);
+      }
+    });
+    PERF_CACHE.signature = perfDataSignature();
+  }
+
   const normalize = (value) => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
     .toUpperCase()
@@ -1069,6 +1191,7 @@
             const cloudPayload = await this.loadCloudPayload(snap);
             if (!cloudPayload?.payload) return;
             this.data = migrate(cloudPayload.payload);
+            invalidatePerfCaches();
             await persistLocalSnapshot(this.data);
             $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizado');
             if (state.session) {
@@ -1142,11 +1265,10 @@
         console.warn('Falha ao carregar base de vendas em lotes. Usando payload principal.', e);
       }
       this.data = data;
-      // Não sobrescreve o Firestore automaticamente com default-data/local antigo na abertura.
-      // Regra operacional: se o Firebase tem payload, ele é a fonte; se estiver vazio ou falhar,
-      // o sistema libera o uso local, mas só grava na nuvem após uma ação real do usuário/importação.
-      const skipStartupCloudSave = loadedSalesFromChunks || usingSeedFallback || !hasCloudPayload || (this.usingCloud && !this._cloudReadOk && hasLocalPayload);
-      await this.save({skipCloud:skipStartupCloudSave, skipSalesChunks:loadedSalesFromChunks});
+      // Não salva automaticamente na abertura. Em bases grandes, um save no login força JSON.stringify/IndexedDB
+      // de todo o payload e era uma das causas do travamento inicial. A nuvem/local só são gravados
+      // após ação real do usuário, importação ou edição.
+      invalidatePerfCaches();
       this._initializing = false;
       this.startCloudListener();
       return data;
@@ -1224,6 +1346,7 @@
       }
     },
     queueSave(options={}, delay=850){
+      invalidatePerfCaches();
       this._queuedSaveOptions = {...(this._queuedSaveOptions || {}), ...(options || {})};
       if (this._localSaveTimer) clearTimeout(this._localSaveTimer);
       return new Promise(resolve => {
@@ -1241,6 +1364,7 @@
       });
     },
     async save({skipCloud=false, onProgress=null, skipSalesChunks=false}={}){
+      invalidatePerfCaches();
       const updatedAt = new Date().toISOString();
       this.lastSaveWarning = '';
       if (this.data && typeof this.data === 'object') this.data._updatedAt = updatedAt;
@@ -1872,11 +1996,15 @@
     setTimeout(()=>el.remove(), 4200);
   }
 
-  function productById(id){ return Store.data.products.find(p=>p.id===id); }
+  function productById(id){
+    if (!id) return null;
+    return getPerfIndexes().productsById.get(id) || null;
+  }
   function storeById(id){
     if (!id) return null;
-    return (Store.data?.stores || []).find(s=>s.id===id)
-      || (window.DEFAULT_STORES || []).find(s=>s.id===id)
+    const idx = getPerfIndexes();
+    return idx.storesById.get(id)
+      || idx.defaultStoresById.get(id)
       || (typeof allKnownStoresForSelection === 'function' ? allKnownStoresForSelection().find(s=>s.id===id) : null)
       || null;
   }
@@ -2224,10 +2352,15 @@
   }
 
   function latestCost(storeId, productId, beforeDate='9999-12-31'){
-    const rows = Store.data.deliveries
-      .filter(d => d.storeId===storeId && d.productId===productId && d.date <= beforeDate && toNumber(d.unitCost)>0)
-      .sort((a,b)=> b.date.localeCompare(a.date));
-    return rows[0]?.unitCost || 0;
+    const direct = getPerfIndexes().latestCostByStoreProduct.get(`${storeId}|${productId}`);
+    if (direct && String(direct.date || '') <= String(beforeDate || '9999-12-31')) return direct.cost || 0;
+    let bestDate = '', bestCost = 0;
+    for (const d of (Store.data.deliveries || [])) {
+      if (d.storeId !== storeId || d.productId !== productId || String(d.date || '') > String(beforeDate || '9999-12-31')) continue;
+      const cost = toNumber(d.unitCost);
+      if (cost > 0 && String(d.date || '') >= bestDate) { bestDate = String(d.date || ''); bestCost = cost; }
+    }
+    return bestCost;
   }
 
   function validQty(d){ return Math.max(0, toNumber(d.qtyPdf) - toNumber(d.faltaQty) - toNumber(d.qualidadeQty)); }
@@ -2247,7 +2380,7 @@
 
   function findDeliveryRowsByDuplicateKey(duplicateKey){
     if (!duplicateKey) return [];
-    return (Store.data.deliveries || []).filter(row => deliveryDuplicateKeyFromRow(row) === duplicateKey);
+    return (getPerfIndexes().deliveriesByDuplicateKey.get(duplicateKey) || []).slice();
   }
 
   function duplicateRowsSummary(rows, kind='delivery'){
@@ -2383,33 +2516,28 @@
     return true;
   }
   function sumSales(storeId, productId, dates=[]){
-    return Store.data.sales
-      .filter(r => r.storeId===storeId && r.productId===productId && (!dates.length || dates.includes(r.date)))
-      .reduce((a,r)=>a+toNumber(r.qty),0);
+    const idx = getPerfIndexes();
+    const selected = unique(dates || []);
+    if (selected.length) return selected.reduce((total, date) => total + toNumber(idx.salesQtyByStoreProductDate.get(`${storeId}|${productId}|${date}`)), 0);
+    return (Store.data.sales || []).reduce((total, r) => r.storeId===storeId && r.productId===productId ? total + toNumber(r.qty) : total, 0);
   }
   function sumDeliveryQty(storeId, productId, dates=[]){
-    return Store.data.deliveries
-      .filter(r => r.storeId===storeId && r.productId===productId && (!dates.length || dates.includes(r.date)))
-      .reduce((a,r)=>a+validQty(r),0);
+    const idx = getPerfIndexes();
+    const selected = unique(dates || []);
+    if (selected.length) return selected.reduce((total, date) => total + toNumber(idx.deliveryQtyByStoreProductDate.get(`${storeId}|${productId}|${date}`)), 0);
+    return (Store.data.deliveries || []).reduce((total, r) => r.storeId===storeId && r.productId===productId ? total + validQty(r) : total, 0);
   }
   function sumDeliveryValue(storeId, productId, dates=[]){
-    return Store.data.deliveries
-      .filter(r => r.storeId===storeId && r.productId===productId && (!dates.length || dates.includes(r.date)))
-      .reduce((a,r)=>a+validValue(r),0);
+    const idx = getPerfIndexes();
+    const selected = unique(dates || []);
+    if (selected.length) return selected.reduce((total, date) => total + toNumber(idx.deliveryValueByStoreProductDate.get(`${storeId}|${productId}|${date}`)), 0);
+    return (Store.data.deliveries || []).reduce((total, r) => r.storeId===storeId && r.productId===productId ? total + validValue(r) : total, 0);
   }
 
   function salesAverageCalc(storeId, productId, dates=[], increasePct=0){
     const selectedDates = unique(dates || []).sort();
-    const rows = Store.data.sales || [];
-    const byDate = {};
-    selectedDates.forEach(d => { byDate[d] = 0; });
-    rows.forEach(r => {
-      if (r.storeId !== storeId || r.productId !== productId) return;
-      if (!selectedDates.length || selectedDates.includes(r.date)) {
-        byDate[r.date] = (byDate[r.date] || 0) + toNumber(r.qty);
-      }
-    });
-    const detail = selectedDates.map(date => ({date, qty: toNumber(byDate[date])}));
+    const idx = getPerfIndexes();
+    const detail = selectedDates.map(date => ({date, qty: toNumber(idx.salesQtyByStoreProductDate.get(`${storeId}|${productId}|${date}`))}));
     const withSales = detail.filter(d => d.qty > 0);
     const total = withSales.reduce((a,d)=>a+d.qty,0);
     const average = withSales.length ? total / withSales.length : 0;
@@ -2529,13 +2657,14 @@
   }
 
   function getCurrentOrder(storeId, type, date=todayISO()){
-    let order = Store.data.orders.find(o => o.storeId===storeId && o.type===type && o.date===date);
+    let order = getPerfIndexes().ordersByStoreTypeDate.get(`${storeId}|${type}|${date}`) || null;
     if (!order) {
       order = { id: uid('order'), storeId, type, date, status:'RASCUNHO', submittedAt:null, lines:{} };
       for (const p of getStoreProducts(storeId, type)) {
         order.lines[p.id] = { productId:p.id, inventoryGross:0, quebraQty:0, suggestion:0, justification:'', updatedAt:null };
       }
       Store.data.orders.push(order);
+      invalidatePerfCaches();
     } else {
       for (const p of getStoreProducts(storeId, type)) {
         order.lines[p.id] ||= { productId:p.id, inventoryGross:0, quebraQty:0, suggestion:0, justification:'', updatedAt:null };
@@ -3555,9 +3684,8 @@
   }
 
   function deliveryDatesForProduct(storeId, productId, beforeOrOn=todayISO()){
-    return unique((Store.data.deliveries || [])
-      .filter(d => d.storeId === storeId && d.productId === productId && (!beforeOrOn || d.date <= beforeOrOn))
-      .map(d => d.date)).sort();
+    const set = getPerfIndexes().deliveryDatesByStoreProduct.get(`${storeId}|${productId}`) || new Set();
+    return Array.from(set).filter(date => !beforeOrOn || date <= beforeOrOn).sort();
   }
 
   function latestDeliveryDateForProduct(storeId, productId, beforeOrOn=todayISO()){
@@ -3566,9 +3694,16 @@
   }
 
   function latestInventoryOutRecord(storeId, productId, beforeOrOn=todayISO(), {beforeOnly=false}={}){
-    return (Store.data.inventoryOut || [])
-      .filter(r => r.storeId === storeId && r.productId === productId && (!beforeOrOn || (beforeOnly ? r.date < beforeOrOn : r.date <= beforeOrOn)))
-      .sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')))[0] || null;
+    const latest = getPerfIndexes().latestInventoryByStoreProduct.get(`${storeId}|${productId}`);
+    if (latest && (!beforeOrOn || (beforeOnly ? latest.date < beforeOrOn : latest.date <= beforeOrOn))) return latest;
+    let best = null, bestSort = '';
+    for (const r of (Store.data.inventoryOut || [])) {
+      if (r.storeId !== storeId || r.productId !== productId) continue;
+      if (beforeOrOn && !(beforeOnly ? r.date < beforeOrOn : r.date <= beforeOrOn)) continue;
+      const sort = `${r.date || ''}|${r.updatedAt || r.createdAt || ''}`;
+      if (!best || sort >= bestSort) { best = r; bestSort = sort; }
+    }
+    return best || null;
   }
 
   function inventoryCycleForProduct(storeId, productId, type='FOLHAGEM', ref=promoterDeliveryReference()){
@@ -3581,10 +3716,11 @@
   }
 
   function getBreakQtyForStock(storeId, productId, dates=[]){
-    const dateSet = new Set((dates || []).filter(Boolean));
+    const selected = unique(dates || []);
+    const idx = getPerfIndexes();
+    if (selected.length) return selected.reduce((total, date) => total + toNumber(idx.breakQtyByStoreProductDate.get(`${storeId}|${productId}|${date}`)), 0);
     return (Store.data.orders || []).reduce((total, order) => {
       if (order.storeId !== storeId) return total;
-      if (dateSet.size && !dateSet.has(order.date)) return total;
       const line = order.lines?.[productId];
       return total + toNumber(line?.quebraQty);
     }, 0);
@@ -4391,14 +4527,15 @@
 
   function buildPedidoAnalysisRows(stores, type, orderDate){
     const rows = [];
+    const idx = getPerfIndexes();
     for (const store of stores) {
       const conf = orderAnalysisConciliation(type, orderDate, store.rede || '');
       const baseDates = unique(conf.baseDates || []).sort();
+      const existingOrder = idx.ordersByStoreTypeDate.get(`${store.id}|${type}|${orderDate}`) || null;
       for (const product of getStoreProducts(store.id, type)) {
         const salesCalc = salesAverageCalc(store.id, product.id, baseDates, conf.increasePct);
         const baseSuggestion = salesCalc.suggestion;
         const deliveryTodayQty = sumDeliveryQty(store.id, product.id, [orderDate]);
-        const existingOrder = (Store.data.orders || []).find(o => o.storeId === store.id && o.type === type && o.date === orderDate);
         const existingLine = existingOrder?.lines?.[product.id] || null;
         const latestInv = latestInventoryOutRecord(store.id, product.id, orderDate);
         const stockGood = existingLine ? getLineInventoryGood(existingLine) : toNumber(latestInv?.stockCurrent || 0);
@@ -4534,7 +4671,7 @@
     const conf = orderAnalysisConciliation(type, orderDate, store.rede || '');
     const salesCalc = salesAverageCalc(store.id, product.id, conf.baseDates || [], conf.increasePct || 0);
     const systemSuggestion = toNumber(salesCalc.suggestion);
-    const order = (Store.data.orders || []).find(o => o.storeId === store.id && o.type === type && o.date === orderDate) || null;
+    const order = getPerfIndexes().ordersByStoreTypeDate.get(`${store.id}|${type}|${orderDate}`) || null;
     const line = order?.lines?.[product.id] || null;
     const promoterOrder = toNumber(line?.suggestion || 0);
     const deliveryReal = sumDeliveryQty(store.id, product.id, [orderDate]);
@@ -5814,26 +5951,47 @@
   }
 
 
+  function importIssuesGroupedBy(field){
+    const map = new Map();
+    (Store.data.importIssues || []).forEach(i => {
+      if (!['PDF','XML'].includes(i.type) || !importIssueStillRelevant(i)) return;
+      const key = i[field] || '';
+      if (!key) return;
+      const list = map.get(key) || [];
+      list.push(issueText(i));
+      map.set(key, list);
+    });
+    return map;
+  }
+
   function deliveryImportSummaries(){
+    const issueByGroup = importIssuesGroupedBy('importGroupKey');
     const map = new Map();
     for (const d of Store.data.deliveries) {
       const key = d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`;
-      if (!map.has(key)) map.set(key,{key,date:d.date,rede:d.rede,storeId:d.storeId,orderNumber:d.orderNumber||'—',fileName:d.fileName||'',importedAt:d.importedAt,items:0,qty:0,value:0,issues:0});
+      if (!map.has(key)) map.set(key,{key,date:d.date,rede:d.rede,storeId:d.storeId,orderNumber:d.orderNumber||'—',fileName:d.fileName||'',importedAt:d.importedAt,items:0,qty:0,value:0,issues:0,alerts:[],batchKeys:new Set()});
       const g=map.get(key);
       g.items += 1;
       g.qty += validQty(d);
       g.value += validValue(d);
+      g.batchKeys.add(d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`);
       if (toNumber(d.noteQtyTotal) > 0) g.noteQtyTotal = toNumber(d.noteQtyTotal);
-      if (!isProductActiveForStore(d.storeId,d.productId)) g.issues += 1;
+      const rowAlerts = alertDetailsForDelivery(d);
+      if (rowAlerts.length) { g.issues += rowAlerts.length; g.alerts.push(...rowAlerts); }
       if (d.importedAt > g.importedAt) g.importedAt = d.importedAt;
     }
-    return Array.from(map.values()).map(g=>({
-      ...g,
-      qty: toNumber(g.noteQtyTotal) > 0 ? toNumber(g.noteQtyTotal) : g.qty
-    })).sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''));
+    return Array.from(map.values()).map(g=>{
+      const alertDetails = unique([...(g.alerts || []), ...(issueByGroup.get(g.key) || [])]);
+      return {
+        ...g,
+        alertDetails,
+        qty: toNumber(g.noteQtyTotal) > 0 ? toNumber(g.noteQtyTotal) : g.qty
+      };
+    }).sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''));
   }
 
   function deliveryFileSummaries(){
+    const issueByBatch = importIssuesGroupedBy('importBatchId');
     const map = new Map();
     for (const d of Store.data.deliveries) {
       const key = d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`;
@@ -5849,7 +6007,8 @@
         items:0,
         qty:0,
         value:0,
-        issues:0
+        issues:0,
+        alerts:[]
       });
       const g = map.get(key);
       g.dates.add(d.date);
@@ -5861,11 +6020,12 @@
       g.items += 1;
       g.qty += validQty(d);
       g.value += validValue(d);
-      if (alertDetailsForDelivery(d).length) g.issues += 1;
+      const rowAlerts = alertDetailsForDelivery(d);
+      if (rowAlerts.length) { g.issues += rowAlerts.length; g.alerts.push(...rowAlerts); }
       if ((d.importedAt||'') > (g.importedAt||'')) g.importedAt = d.importedAt;
     }
     return Array.from(map.values()).map(g=>{
-      const batchIssues = alertDetailsForBatch(g.key);
+      const batchIssues = unique([...(g.alerts || []), ...(issueByBatch.get(g.key) || [])]);
       const noteQtyTotal = Array.from(g.noteQtyTotals.values()).reduce((sum,n)=>sum + toNumber(n), 0);
       return {
         ...g,
@@ -5874,7 +6034,7 @@
         stores:g.stores.size,
         notes:g.notes.size,
         qty: noteQtyTotal > 0 ? noteQtyTotal : g.qty,
-        issues:g.issues + batchIssues.length,
+        issues:batchIssues.length,
         issueDetails:batchIssues
       };
     }).sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''));
@@ -5882,11 +6042,8 @@
 
   function deliveryNoteSummariesForBatch(batchKey){
     return deliveryImportSummaries()
-      .filter(r => {
-        const rows = Store.data.deliveries.filter(d => (d.importGroupKey || `${d.date}|${d.rede}|${d.storeId}|${d.orderNumber||d.fileName||''}`) === r.key);
-        return rows.some(d => (d.importBatchId || `${d.fileName}|${d.rede}|${d.importedAt}`) === batchKey);
-      })
-      .map(r => ({...r, alertDetails: alertDetailsForNote(r.key)}));
+      .filter(r => r.batchKeys?.has?.(batchKey))
+      .map(r => ({...r, alertDetails: r.alertDetails || alertDetailsForNote(r.key)}));
   }
 
   function alertDetailsForDelivery(d){
@@ -6103,7 +6260,7 @@
     return `<div class="table-wrap pdf-history-table"><table><thead><tr><th></th><th>Importado em</th><th>Rede</th><th>Arquivo</th><th>Data(s) entrega</th><th class="num">Lojas</th><th class="num">Notas</th><th class="num">Qtd. total</th><th class="num">Valor total</th><th>Status</th><th>Ação</th></tr></thead><tbody>
       ${rows.map(r=>{
         const expanded = !!state.expandedPdfImports[r.key];
-        const details = alertDetailsForBatch(r.key);
+        const details = r.issueDetails || alertDetailsForBatch(r.key);
         const detailRows = expanded ? renderPdfImportDetailRows(r.key) : '';
         return `
           <tr class="pdf-summary-row">
@@ -6158,7 +6315,7 @@
   function renderDeliveryImportSummary(rows){
     return `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Rede</th><th>Loja</th><th>Nº nota/pedido</th><th class="num">Itens na nota</th><th class="num">Qtd. total</th><th class="num">Valor total</th><th>Status</th><th>Ação</th></tr></thead><tbody>
       ${rows.map(r=>{
-        const details = alertDetailsForNote(r.key);
+        const details = r.alertDetails || alertDetailsForNote(r.key);
         return `<tr><td>${formatDate(r.date)}</td><td>${r.rede}</td><td>${storeById(r.storeId)?.nome||''}</td><td>${escapeHtml(r.orderNumber)}</td><td class="num">${fmt.format(r.items)}</td><td class="num">${fmt.format(r.qty)}</td><td class="num">${money.format(r.value)}</td><td>${renderStatusBadge(details,'note',r.key)}</td><td><button class="btn btn-sm btn-danger" type="button" data-app-action="delete-delivery-import" data-key="${escapeHtml(encodeIssueKeyForAttr(r.key))}">Excluir</button></td></tr>`;
       }).join('') || `<tr><td colspan="9" class="center muted">Nenhum XML/PDF importado.</td></tr>`}
     </tbody></table></div>`;
@@ -6646,6 +6803,7 @@
     if (relatedRows.length) {
       const keys = new Set(relatedRows.map(d => d.id));
       Store.data.deliveries = (Store.data.deliveries || []).filter(d => !keys.has(d.id));
+      invalidatePerfCaches();
     }
     rememberCancelledNfe({...info, date, storeName:loja, rede, storeId:store?.id || ''}, fileLabel, batchId, relatedRows);
 
@@ -6828,6 +6986,7 @@
       return {records:[], unmatched, noteFound, importGroupKey, duplicate:buildDeliveryDuplicate({sourceType:'XML', fileName:fileLabel, batchId, importGroupKey, duplicateKey, store, date, orderNumber, xmlKey:chave, newRows:records, existingRows})};
     }
     Store.data.deliveries.push(...records);
+    appendDeliveryRowsToPerfCache(records);
     return {records, unmatched, noteFound, importGroupKey};
   }
 
@@ -6957,13 +7116,11 @@
             log.push(`${file.name}: 1 XML, ${parsed.duplicate ? 'duplicidade enviada para conferência' : (parsed.cancelled ? 'NF cancelada rejeitada' : (parsed.records.length ? '1 NF-e ativa importada' : '0 NF-e importada'))}, ${parsed.records.length} itens${parsed.unmatched.length ? ` • ${parsed.unmatched.length} divergência(s)` : ''}.`);
             processedSteps++;
             updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${fmt.format(total)} itens importados`);
-            await Store.save();
           } catch(e) {
             console.error(e);
             log.push(`${file.name}: erro ${e.message}`);
             Store.data.importIssues.push({id:uid('issue'), type:'XML', kind:'Erro de leitura', fileName:file.name, importBatchId:batchId, message:'Erro ao processar XML', detail:e.message, createdAt:new Date().toISOString()});
             processedSteps++;
-            await Store.save();
           }
         } else if (ext === 'zip') {
           try {
@@ -7006,7 +7163,6 @@
               if (registerParsedDuplicate(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML')) duplicidadesDetectadas++;
               processedSteps++;
               updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${entry.name} • ${fmt.format(total)} itens importados`);
-              if (processedSteps % 50 === 0) await Store.save();
               if (processedSteps % 5 === 0) await yieldToBrowser();
             }
 
@@ -7028,7 +7184,6 @@
               if (registerParsedDuplicate(parsed, xmlFileDisplayName(file.name, entry.name), batchId, 'XML')) duplicidadesDetectadas++;
               processedSteps++;
               updatePdfProgress(processedSteps, totalSteps, `${file.name} • ${entry.name} • NF cancelada rejeitada`);
-              if (processedSteps % 50 === 0) await Store.save();
               if (processedSteps % 5 === 0) await yieldToBrowser();
             }
 
@@ -7058,18 +7213,15 @@
                 if (registerParsedDuplicate(parsed, displayName, batchId, 'PDF')) duplicidadesDetectadas++;
                 processedSteps++;
                 updatePdfProgress(processedSteps, totalSteps, `${displayName} • página ${pageNo}/${doc.numPages} • ${fmt.format(total)} itens importados`);
-                if (processedSteps % 50 === 0) await Store.save();
                 if (processedSteps % 3 === 0) await yieldToBrowser();
               }
             }
             log.push(`${file.name}: ${entries.length} arquivo(s) no ZIP (${zipXml} XML, ${zipPdf} PDF), ${zipNotas} NF-e/notas importadas, ${zipCancel} NF cancelada(s) rejeitada(s), ${zipItens} itens${zipDiv ? ` • ${zipDiv} divergência(s)` : ''}.`);
-            await Store.save();
           } catch(e) {
             console.error(e);
             log.push(`${file.name}: erro ${e.message}`);
             Store.data.importIssues.push({id:uid('issue'), type:'XML', kind:'Erro de leitura', fileName:file.name, importBatchId:batchId, message:'Erro ao processar ZIP/XML', detail:e.message, createdAt:new Date().toISOString()});
             processedSteps++;
-            await Store.save();
           }
         } else {
           processedSteps++;
@@ -7386,6 +7538,7 @@
       return {records:[], unmatched, noteFound, importGroupKey, duplicate:buildDeliveryDuplicate({sourceType:'PDF', fileName, batchId, importGroupKey, duplicateKey, store, date:dataSaida || todayISO(), orderNumber:pedido, xmlKey:'', newRows:records, existingRows})};
     }
     Store.data.deliveries.push(...records);
+    appendDeliveryRowsToPerfCache(records);
     return {records, unmatched, noteFound, importGroupKey};
   }
 
@@ -7554,6 +7707,7 @@
       const rows = sanitizeRowsForDuplicate(dup.pendingRows || []).map(r => ({...r, id:uid('del'), importedAt:new Date().toISOString()}));
       Store.data.deliveries ||= [];
       Store.data.deliveries.push(...rows);
+      appendDeliveryRowsToPerfCache(rows);
       dup.status = 'SUBSTITUIDA_PELA_NOVA';
       resultMessage = `${fmt.format(removed)} item(ns) antigo(s) removido(s) e ${fmt.format(rows.length)} novo(s) importado(s).`;
     } else if (dup.scope === 'SALES' && action === 'replace') {
