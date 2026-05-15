@@ -1,3 +1,12 @@
+# Sistema Comercial Só Folhas — v80
+
+## v80 - Controle de Bases leve
+
+- Adiciona aba **Controle de Bases** para consultar bases importadas, entregas e dias pendentes por data/rede/tipo.
+- Mantém o controle leve, com resumo por data e rede, sem voltar o calendário pesado automático.
+- Atualiza cache do `script.js` para `v=80`.
+- Preserva HTML/CSS/JavaScript puro e Firebase existente.
+
 # Sistema Comercial Só Folhas — v57
 
 ## v57

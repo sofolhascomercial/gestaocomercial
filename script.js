@@ -23,6 +23,7 @@
     {id:'dashboard', icon:'▥', label:'Dashboard'},
     {id:'importar-pdf', icon:'▣', label:'Importar XML/PDF'},
     {id:'bases', icon:'▤', label:'Bases de Venda'},
+    {id:'controle-bases', icon:'▧', label:'Controle de Bases'},
     {id:'conciliacao', icon:'◈', label:'Conciliação'},
     {id:'analise-pedidos', icon:'▤', label:'Pedidos'},
     {id:'resultado-pedido', icon:'◬', label:'Resultado do Pedido'},
@@ -31,7 +32,7 @@
   ];
   const NAV_GROUPS = [
     {title:'Painel', pages:['dashboard']},
-    {title:'Importações', pages:['importar-pdf','bases','conciliacao','duplicidades']},
+    {title:'Importações', pages:['importar-pdf','bases','controle-bases','conciliacao','duplicidades']},
     {title:'Comercial', pages:['analise-pedidos','resultado-pedido']},
     {title:'Administração', pages:['usuarios']}
   ];
@@ -41,7 +42,7 @@
     {title:'Atendimento', items:[['chamados','✉','Chamados']]},
     {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
-  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','importar-pdf','bases','conciliacao','analise-pedidos','resultado-pedido','duplicidades'];
+  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','importar-pdf','bases','controle-bases','conciliacao','analise-pedidos','resultado-pedido','duplicidades'];
   const DEFAULT_COMMERCIAL_USERS = [
     { usuario:'anderson.wagner', senha:'sofolhas2026', nome:'Anderson Wagner', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
     { usuario:'matheus.victor', senha:'sofolhas2026', nome:'Matheus Victor', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
@@ -1918,6 +1919,7 @@
       priceCheckWeekdays: [1,3,5],
       pricePermissionBootstrapDone: false,
       duplicatePermissionBootstrapDone: false,
+      baseControlPermissionBootstrapDone: false,
       ...(data.appConfig || {})
     };
     data.appConfig.criticalRuptureProductIds = unique(data.appConfig.criticalRuptureProductIds || ['alface_crespa_und','cheiro_verde','couve_und','brocolis_americano']);
@@ -1951,6 +1953,12 @@
         if (u.role === 'commercial') u.permissions = sanitizePermissions(unique([...(u.permissions || []), 'duplicidades']));
       });
       data.appConfig.duplicatePermissionBootstrapDone = true;
+    }
+    if (!data.appConfig.baseControlPermissionBootstrapDone) {
+      (data.users || []).forEach(u => {
+        if (u.role === 'commercial') u.permissions = sanitizePermissions(unique([...(u.permissions || []), 'controle-bases']));
+      });
+      data.appConfig.baseControlPermissionBootstrapDone = true;
     }
     if (!data.appConfig.criticalRuptureProductsByRede || typeof data.appConfig.criticalRuptureProductsByRede !== 'object' || Array.isArray(data.appConfig.criticalRuptureProductsByRede)) {
       data.appConfig.criticalRuptureProductsByRede = {};
@@ -2001,6 +2009,11 @@
       rede: '',
       month: '',
       simulatorDates: []
+    },
+    baseControl: {
+      rede: '',
+      month: '',
+      status: ''
     },
     dayClosing: {
       date: '',
@@ -4181,6 +4194,7 @@
       case 'precos': return renderPriceMonitoringAdmin();
       case 'chamados': return renderTickets();
       case 'bases': return renderImportSales();
+      case 'controle-bases': return renderBaseControl();
       case 'conciliacao': return renderConciliation();
       case 'faltas': return renderMissingQuality();
       case 'pendencias': return renderPendencies();
@@ -5144,16 +5158,14 @@
     const deliveriesCount = Array.isArray(Store.data?.deliveries) ? Store.data.deliveries.length : 0;
     const salesImportsCount = Array.isArray(Store.data?.salesImports) ? Store.data.salesImports.length : 0;
     const modules = [
-      ['Importar XML/PDF','Importe ou confira entregas por XML/PDF.','importar-pdf','▣','green'],
-      ['Base de vendas','Importe e acompanhe a base de vendas Excel.','bases','▤','blue'],
-      ['Conciliação','Defina entrega e múltiplas datas base.','conciliacao','◈','amber'],
+      ['Importar XML/PDF','Importe entregas por XML/PDF/ZIP.','importar-pdf','▣','green'],
+      ['Base de vendas','Importe a base Excel consolidada.','bases','▤','blue'],
+      ['Controle de Bases','Veja bases importadas e dias pendentes.','controle-bases','▧','amber'],
+      ['Conciliação','Ligue entrega com datas base.','conciliacao','◈','amber'],
       ['Pedidos','Análise de pedido por produto.','analise-pedidos','▤','green'],
-      ['Resultado do Pedido','Analise acerto, excesso, quebra e risco.','resultado-pedido','◬','blue'],
-      ['Dashboard Apresentação','Painel para TV com venda x quebra e rankings.','dashboard-apresentacao','◫','green'],
-      ['Estoque em Loja','Acompanhe estoque bom e risco de falta.','estoque-loja','▦','amber'],
-      ['Rupturas','Itens obrigatórios e rupturas pendentes.','rupturas','⚠','red'],
+      ['Resultado do Pedido','Analise acerto, excesso e quebra.','resultado-pedido','◬','blue'],
       ['Duplicidades','Resolva importações duplicadas.','duplicidades','⧉','amber'],
-      ['Histórico','Auditoria e histórico das importações.','historico','↺','blue']
+      ['Usuários','Acessos e permissões da equipe.','usuarios','♙','blue']
     ];
     $('#viewRoot').innerHTML = `
       <section class="dashboard-shell dashboard-light">
@@ -5192,6 +5204,7 @@
           <div class="exec-shortcuts">
             <button class="btn btn-soft" onclick="App.go('importar-pdf')">Importar XML/PDF</button>
             <button class="btn btn-soft" onclick="App.go('bases')">Importar base</button>
+            <button class="btn btn-soft" onclick="App.go('controle-bases')">Controle de bases</button>
             <button class="btn btn-soft" onclick="App.go('conciliacao')">Conciliar base</button>
             <button class="btn btn-soft" onclick="App.go('analise-pedidos')">Montar pedido</button>
             <button class="btn btn-soft" onclick="App.go('resultado-pedido')">Ver resultado</button>
@@ -10378,6 +10391,235 @@
       state.baseSales.simulatorDates = Array.from(set).sort();
       renderImportSales();
     }));
+  }
+
+
+  function baseControlMonthOptions(){
+    const months = new Set();
+    (Store.data.sales || []).forEach(r => { if (r.date) months.add(String(r.date).slice(0,7)); });
+    (Store.data.deliveries || []).forEach(r => { if (r.date) months.add(String(r.date).slice(0,7)); });
+    const plans = Store.data.deliveryConciliations || {};
+    ['FOLHAGEM','BANDEJA'].forEach(type => {
+      Object.keys(plans[type] || {}).forEach(date => { if (date) months.add(String(date).slice(0,7)); });
+    });
+    (Store.data.importIssues || []).forEach(i => { if (i.date) months.add(String(i.date).slice(0,7)); });
+    (Store.data.importDuplicates || []).forEach(d => { if (d.date) months.add(String(d.date).slice(0,7)); });
+    return Array.from(months).filter(Boolean).sort().reverse();
+  }
+
+  function baseControlRedeOptions(){
+    const redes = new Set();
+    (Store.data.stores || []).forEach(st => { if (st.rede) redes.add(st.rede); });
+    (Store.data.sales || []).forEach(r => { if (r.rede) redes.add(r.rede); });
+    (Store.data.deliveries || []).forEach(r => { if (r.rede) redes.add(r.rede); });
+    (Store.data.importIssues || []).forEach(i => { if (i.rede) redes.add(i.rede); });
+    return Array.from(redes).filter(Boolean).sort((a,b)=>String(a).localeCompare(String(b),'pt-BR'));
+  }
+
+  function normalizeBaseControlStatus(status=''){
+    return String(status || '').toLowerCase().replace(/\s+/g,'-');
+  }
+
+  function computeBaseControl({rede='', month='', status=''}={}){
+    const productsById = new Map((Store.data.products || []).map(p => [p.id, p]));
+    const salesMap = new Map();
+    const salesDateRedeSet = new Set();
+    for (const r of (Store.data.sales || [])) {
+      if (!r.date || !r.rede) continue;
+      if (rede && r.rede !== rede) continue;
+      if (month && !String(r.date || '').startsWith(month)) continue;
+      const key = `${r.date}|${r.rede}`;
+      salesDateRedeSet.add(key);
+      if (!salesMap.has(key)) salesMap.set(key, {date:r.date, rede:r.rede, records:0, stores:new Set(), products:new Set(), qty:0, unmatchedStores:0, unmatchedProducts:0, importIds:new Set()});
+      const item = salesMap.get(key);
+      item.records += 1;
+      item.qty += toNumber(r.qty);
+      if (r.storeId) item.stores.add(r.storeId); else item.unmatchedStores += 1;
+      if (r.productId) item.products.add(r.productId); else item.unmatchedProducts += 1;
+      if (r.importId || r.fileId) item.importIds.add(r.importId || r.fileId);
+    }
+
+    const deliveryMap = new Map();
+    for (const d of (Store.data.deliveries || [])) {
+      if (!d.date || !d.rede) continue;
+      if (rede && d.rede !== rede) continue;
+      if (month && !String(d.date || '').startsWith(month)) continue;
+      const productType = productsById.get(d.productId)?.tipo || d.type || d.tipo || 'AMBOS';
+      const types = ['FOLHAGEM','BANDEJA'].includes(productType) ? [productType] : ['FOLHAGEM','BANDEJA'];
+      for (const type of types) {
+        const key = `${d.date}|${d.rede}|${type}`;
+        if (!deliveryMap.has(key)) deliveryMap.set(key, {date:d.date, rede:d.rede, type, records:0, stores:new Set(), products:new Set(), notes:new Set(), qty:0, value:0});
+        const item = deliveryMap.get(key);
+        item.records += 1;
+        if (d.storeId) item.stores.add(d.storeId);
+        if (d.productId) item.products.add(d.productId);
+        if (d.orderNumber || d.xmlKey || d.importGroupKey) item.notes.add(d.orderNumber || d.xmlKey || d.importGroupKey);
+        item.qty += validQty(d);
+        item.value += validValue(d);
+      }
+    }
+
+    const issueMap = new Map();
+    for (const i of (Store.data.importIssues || [])) {
+      if (i.status && normalize(i.status).includes('RESOLV')) continue;
+      const date = i.date || i.deliveryDate || '';
+      const iRede = i.rede || '';
+      if (!date || !iRede) continue;
+      if (rede && iRede !== rede) continue;
+      if (month && !String(date).startsWith(month)) continue;
+      const key = `${date}|${iRede}`;
+      issueMap.set(key, (issueMap.get(key) || 0) + 1);
+    }
+
+    const duplicateMap = new Map();
+    for (const d of (Store.data.importDuplicates || [])) {
+      if (d.status && d.status !== 'PENDENTE') continue;
+      const dates = d.conflictDates?.length ? d.conflictDates : [d.date || d.dateFrom || ''];
+      const redes = d.conflictRedes?.length ? d.conflictRedes : String(d.rede || '').split(',').map(x=>x.trim()).filter(Boolean);
+      for (const dd of dates.filter(Boolean)) {
+        for (const rr of (redes.length ? redes : [''])) {
+          if (!rr) continue;
+          if (rede && rr !== rede) continue;
+          if (month && !String(dd).startsWith(month)) continue;
+          const key = `${dd}|${rr}`;
+          duplicateMap.set(key, (duplicateMap.get(key) || 0) + 1);
+        }
+      }
+    }
+
+    const rowsByKey = new Map();
+    for (const [key, del] of deliveryMap.entries()) rowsByKey.set(key, {...del});
+    const plans = Store.data.deliveryConciliations || {};
+    for (const type of ['FOLHAGEM','BANDEJA']) {
+      const byDate = plans[type] || {};
+      Object.keys(byDate).forEach(date => {
+        if (month && !String(date).startsWith(month)) return;
+        Object.keys(byDate[date] || {}).forEach(r => {
+          if (rede && r !== rede) return;
+          const key = `${date}|${r}|${type}`;
+          if (!rowsByKey.has(key)) rowsByKey.set(key, {date, rede:r, type, records:0, stores:new Set(), products:new Set(), notes:new Set(), qty:0, value:0});
+        });
+      });
+    }
+
+    const deliveryRows = Array.from(rowsByKey.values()).map(row => {
+      const plan = deliveryConciliationRecord(row.type, row.date, row.rede) || {};
+      const baseDates = unique(plan.baseDates || []).sort();
+      const missingBaseDates = baseDates.filter(d => !salesDateRedeSet.has(`${d}|${row.rede}`));
+      const issueCount = issueMap.get(`${row.date}|${row.rede}`) || 0;
+      const duplicateCount = duplicateMap.get(`${row.date}|${row.rede}`) || 0;
+      let label = 'OK';
+      let badge = 'green';
+      if (!row.records && baseDates.length) { label = 'Entrega pendente'; badge = 'amber'; }
+      else if (row.records && !baseDates.length) { label = 'Conciliação pendente'; badge = 'amber'; }
+      else if (missingBaseDates.length) { label = 'Base pendente'; badge = 'amber'; }
+      if (duplicateCount) { label = 'Duplicidade pendente'; badge = 'amber'; }
+      if (issueCount) { label = 'Erro de importação'; badge = 'amber'; }
+      return {
+        ...row,
+        baseDates,
+        missingBaseDates,
+        issueCount,
+        duplicateCount,
+        statusLabel: label,
+        statusBadge: badge
+      };
+    }).filter(row => {
+      const st = normalizeBaseControlStatus(status);
+      return !st || normalizeBaseControlStatus(row.statusLabel) === st;
+    }).sort((a,b)=> String(b.date).localeCompare(String(a.date)) || String(a.rede).localeCompare(String(b.rede)) || String(a.type).localeCompare(String(b.type)));
+
+    const baseRows = Array.from(salesMap.values()).map(r => ({...r, issueCount:issueMap.get(`${r.date}|${r.rede}`)||0, duplicateCount:duplicateMap.get(`${r.date}|${r.rede}`)||0}))
+      .sort((a,b)=> String(b.date).localeCompare(String(a.date)) || String(a.rede).localeCompare(String(b.rede)));
+    const pendingRows = deliveryRows.filter(r => r.statusLabel !== 'OK');
+    return {baseRows, deliveryRows, pendingRows};
+  }
+
+  function renderBaseImportedRows(rows){
+    return `<div class="table-wrap"><table>
+      <thead><tr><th>Data base</th><th>Rede</th><th>Status</th><th class="num">Lojas</th><th class="num">Produtos</th><th class="num">Registros</th><th class="num">Qtd vendida</th></tr></thead>
+      <tbody>${rows.map(r => {
+        const alertCount = toNumber(r.unmatchedStores) + toNumber(r.unmatchedProducts) + toNumber(r.issueCount) + toNumber(r.duplicateCount);
+        return `<tr>
+          <td><strong>${formatDate(r.date)}</strong></td>
+          <td>${escapeHtml(r.rede || '—')}</td>
+          <td>${alertCount ? `<span class="badge amber">Atenção: ${fmt.format(alertCount)}</span>` : '<span class="badge green">Importada</span>'}</td>
+          <td class="num">${fmt.format(r.stores?.size || 0)}</td>
+          <td class="num">${fmt.format(r.products?.size || 0)}</td>
+          <td class="num">${fmt.format(r.records || 0)}</td>
+          <td class="num">${fmt.format(r.qty || 0)}</td>
+        </tr>`;
+      }).join('') || `<tr><td colspan="7" class="center muted">Nenhuma base importada no filtro.</td></tr>`}</tbody>
+    </table></div>`;
+  }
+
+  function renderDeliveryControlRows(rows){
+    return `<div class="table-wrap"><table>
+      <thead><tr><th>Data entrega</th><th>Rede</th><th>Tipo</th><th>Status</th><th>Datas base vinculadas</th><th class="num">Notas</th><th class="num">Lojas</th><th class="num">Qtd entrega</th></tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td><strong>${formatDate(r.date)}</strong></td>
+        <td>${escapeHtml(r.rede || '—')}</td>
+        <td>${escapeHtml(typeLabelShort(r.type))}</td>
+        <td><span class="badge ${r.statusBadge || 'gray'}">${escapeHtml(r.statusLabel || '—')}</span>${r.issueCount ? ` <span class="badge amber">${fmt.format(r.issueCount)} erro(s)</span>` : ''}${r.duplicateCount ? ` <span class="badge amber">${fmt.format(r.duplicateCount)} duplicidade(s)</span>` : ''}</td>
+        <td>${r.baseDates?.length ? r.baseDates.map(d => `<span class="badge ${r.missingBaseDates?.includes(d) ? 'amber' : 'green'}">${formatDate(d)}</span>`).join(' ') : '<span class="muted">Não definida</span>'}</td>
+        <td class="num">${fmt.format(r.notes?.size || 0)}</td>
+        <td class="num">${fmt.format(r.stores?.size || 0)}</td>
+        <td class="num">${fmt.format(r.qty || 0)}</td>
+      </tr>`).join('') || `<tr><td colspan="8" class="center muted">Nenhuma entrega/conciliação encontrada no filtro.</td></tr>`}</tbody>
+    </table></div>`;
+  }
+
+  function bindBaseControlEvents(){
+    $('#baseControlRede')?.addEventListener('change', e => { state.baseControl.rede = e.target.value; renderBaseControl(); });
+    $('#baseControlMonth')?.addEventListener('change', e => { state.baseControl.month = e.target.value; renderBaseControl(); });
+    $('#baseControlStatus')?.addEventListener('change', e => { state.baseControl.status = e.target.value; renderBaseControl(); });
+  }
+
+  function renderBaseControl(){
+    setTitle('Controle de Bases', 'Resumo leve das bases importadas, entregas e pendências por data.');
+    const redes = baseControlRedeOptions();
+    const months = baseControlMonthOptions();
+    if (!state.baseControl.month && months.length) state.baseControl.month = months[0];
+    const selected = state.baseControl || {};
+    const data = computeBaseControl({rede:selected.rede || '', month:selected.month || '', status:selected.status || ''});
+    const baseDatesCount = new Set(data.baseRows.map(r => `${r.date}|${r.rede}`)).size;
+    const deliveryDatesCount = new Set(data.deliveryRows.map(r => `${r.date}|${r.rede}`)).size;
+    $('#viewRoot').innerHTML = `
+      ${deferredDataNoticeHtml()}
+      <div class="grid kpis">
+        ${kpi('▤','Bases importadas',fmt.format(baseDatesCount),'datas base por rede')}
+        ${kpi('▣','Entregas encontradas',fmt.format(deliveryDatesCount),'datas de entrega por rede')}
+        ${kpi('◈','Conciliações pendentes',fmt.format(data.pendingRows.filter(r=>r.statusLabel === 'Conciliação pendente').length),'entrega sem data base', data.pendingRows.length ? 'amber' : 'green')}
+        ${kpi('!','Pendências totais',fmt.format(data.pendingRows.length),'base, entrega, erro ou duplicidade', data.pendingRows.length ? 'amber' : 'green')}
+      </div>
+      <div class="card">
+        <div class="panel-head">
+          <div><h3>Controle leve por data</h3><p class="muted small">Mostra somente resumo por data e rede. Não carrega item por item na tela.</p></div>
+          <div class="footer-actions"><button class="btn btn-soft" type="button" onclick="App.go('bases')">Importar base</button><button class="btn btn-soft" type="button" onclick="App.go('conciliacao')">Conciliar</button></div>
+        </div>
+        <div class="filter-row">
+          <div class="filter">Rede <select id="baseControlRede"><option value="">Todas</option>${redes.map(r=>`<option value="${escapeHtml(r)}" ${selected.rede===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select></div>
+          <div class="filter">Mês <select id="baseControlMonth"><option value="">Todos</option>${months.map(m=>`<option value="${escapeHtml(m)}" ${selected.month===m?'selected':''}>${m.split('-').reverse().join('/')}</option>`).join('')}</select></div>
+          <div class="filter">Status <select id="baseControlStatus"><option value="">Todos</option>${['OK','Conciliação pendente','Base pendente','Entrega pendente','Erro de importação','Duplicidade pendente'].map(st=>`<option value="${escapeHtml(st)}" ${selected.status===st?'selected':''}>${escapeHtml(st)}</option>`).join('')}</select></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="panel-head"><div><h3>Dias pendentes</h3><p class="muted small">Priorize estas datas antes de analisar pedidos ou resultado.</p></div><span class="badge ${data.pendingRows.length ? 'amber' : 'green'}">${data.pendingRows.length ? `${fmt.format(data.pendingRows.length)} pendência(s)` : 'Tudo certo'}</span></div>
+        ${renderDeliveryControlRows(data.pendingRows.slice(0,300))}
+        ${data.pendingRows.length > 300 ? `<p class="muted small">Exibindo 300 pendências para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
+      </div>
+      <div class="card">
+        <div class="panel-head"><div><h3>Bases importadas</h3><p class="muted small">Datas de venda que já estão salvas no sistema.</p></div></div>
+        ${renderBaseImportedRows(data.baseRows.slice(0,500))}
+        ${data.baseRows.length > 500 ? `<p class="muted small">Exibindo 500 datas para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
+      </div>
+      <div class="card">
+        <div class="panel-head"><div><h3>Entregas x Conciliação</h3><p class="muted small">Mostra cada data de entrega, rede e tipo com as bases vinculadas.</p></div></div>
+        ${renderDeliveryControlRows(data.deliveryRows.slice(0,500))}
+        ${data.deliveryRows.length > 500 ? `<p class="muted small">Exibindo 500 linhas para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
+      </div>
+    `;
+    bindBaseControlEvents();
   }
 
   function renderImportSales(){
