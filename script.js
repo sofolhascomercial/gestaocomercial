@@ -16,38 +16,24 @@
   const CLOUD_SALES_CHUNK_SIZE = 500;
   const CLOUD_CHUNK_SIZE = 700000;
   const ADMIN_USER = { usuario: 'gerenciacomercial', senha: 'sofolhas2026', nome: 'Administrador Comercial', role: 'admin' };
+  // Modo comercial enxuto: remove módulos pesados do carregamento/navegação principal.
+  // As funções antigas continuam no arquivo para não quebrar compatibilidade de dados, mas não são renderizadas automaticamente.
+  const SLIM_MODE = true;
   const ADMIN_PAGES = [
     {id:'dashboard', icon:'▥', label:'Dashboard'},
-    {id:'dashboard-apresentacao', icon:'◫', label:'Dashboard Apresentação'},
-    {id:'fechamento-dia', icon:'✓', label:'Fechamento do Dia'},
-    {id:'inventario-saida', icon:'▨', label:'Inventário de Saída'},
-    {id:'estoque-loja', icon:'▦', label:'Estoque em Loja'},
-    {id:'analises', icon:'▥', label:'Análises Comerciais'},
-    {id:'analise-pedidos', icon:'▤', label:'Pedidos'},
-    {id:'resultado-pedido', icon:'◬', label:'Resultado do Pedido'},
     {id:'importar-pdf', icon:'▣', label:'Importar XML/PDF'},
-    {id:'conferencia-importacao', icon:'☑', label:'Conferência de Importação'},
-    {id:'duplicidades', icon:'⧉', label:'Duplicidades'},
-    {id:'ofertas', icon:'🏷', label:'Ofertas'},
-    {id:'precos', icon:'💲', label:'Acompanhamento de Preços'},
-    {id:'chamados', icon:'✉', label:'Chamados'},
     {id:'bases', icon:'▤', label:'Bases de Venda'},
     {id:'conciliacao', icon:'◈', label:'Conciliação'},
-    {id:'faltas', icon:'◇', label:'Faltas e Qualidade'},
-    {id:'pendencias', icon:'▧', label:'Pendências de Bandejas'},
-    {id:'itens-obrigatorios', icon:'🚨', label:'Itens Obrigatórios'},
-    {id:'rupturas', icon:'⚠', label:'Rupturas'},
-    {id:'mix', icon:'◌', label:'Mix por Loja'},
-    {id:'usuarios', icon:'♙', label:'Usuários', adminOnly:true},
-    {id:'historico', icon:'↺', label:'Histórico'}
+    {id:'analise-pedidos', icon:'▤', label:'Pedidos'},
+    {id:'resultado-pedido', icon:'◬', label:'Resultado do Pedido'},
+    {id:'duplicidades', icon:'⧉', label:'Duplicidades'},
+    {id:'usuarios', icon:'♙', label:'Usuários', adminOnly:true}
   ];
   const NAV_GROUPS = [
-    {title:'Painel', pages:['dashboard','dashboard-apresentacao','fechamento-dia']},
-    {title:'Importações', pages:['importar-pdf','conferencia-importacao','duplicidades','bases','conciliacao']},
-    {title:'Comercial', pages:['analises','analise-pedidos','resultado-pedido','ofertas','precos']},
-    {title:'Operação', pages:['inventario-saida','estoque-loja','rupturas','itens-obrigatorios','faltas','pendencias','mix']},
-    {title:'Atendimento', pages:['chamados']},
-    {title:'Administração', pages:['usuarios','historico']}
+    {title:'Painel', pages:['dashboard']},
+    {title:'Importações', pages:['importar-pdf','bases','conciliacao','duplicidades']},
+    {title:'Comercial', pages:['analise-pedidos','resultado-pedido']},
+    {title:'Administração', pages:['usuarios']}
   ];
   const STORE_NAV_GROUPS = [
     {title:'Início', items:[['inicio-loja','⌂','Visão Geral']]},
@@ -55,7 +41,7 @@
     {title:'Atendimento', items:[['chamados','✉','Chamados']]},
     {title:'Histórico', items:[['meus-pedidos','▤','Meus Pedidos'], ['historico-loja','↺','Histórico'], ['correcao-loja','⚠','Solicitações']]}
   ];
-  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','dashboard-apresentacao','fechamento-dia','inventario-saida','estoque-loja','analises','analise-pedidos','resultado-pedido','ofertas','precos','chamados','bases','conciliacao','duplicidades','faltas','pendencias','rupturas','historico'];
+  const DEFAULT_COMMERCIAL_PERMISSIONS = ['dashboard','importar-pdf','bases','conciliacao','analise-pedidos','resultado-pedido','duplicidades'];
   const DEFAULT_COMMERCIAL_USERS = [
     { usuario:'anderson.wagner', senha:'sofolhas2026', nome:'Anderson Wagner', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
     { usuario:'matheus.victor', senha:'sofolhas2026', nome:'Matheus Victor', role:'commercial', active:true, permissions:[...DEFAULT_COMMERCIAL_PERMISSIONS] },
@@ -1102,6 +1088,10 @@
       const snap = snapshot || await docRef.get();
       if (!snap.exists) return null;
       const meta = snap.data() || {};
+      const allowHeavy = options?.allowHeavy !== false;
+      if (!allowHeavy && ((meta.storage === 'chunked' && toNumber(meta.chunkCount) > 0) || (meta.salesStorage === 'chunked-arrays' && toNumber(meta.salesChunkCount) > 0))) {
+        return {deferred:true, updatedAt: meta.updatedAt || '', meta};
+      }
       let payload = meta.payload || null;
       if (meta.storage === 'chunked' && toNumber(meta.chunkCount) > 0) {
         const qs = await docRef.collection(CLOUD_CHUNK_COLLECTION).orderBy('idx').get();
@@ -1223,23 +1213,38 @@
         }
       } catch(e) { console.warn('Firebase não iniciado, usando localStorage.', e); }
       let localData = null;
-      try { localData = await idbGet(STORAGE_KEY); } catch(e) { console.warn('IndexedDB indisponível. Tentando localStorage.', e); }
-      if (!localData) {
-        const local = localStorage.getItem(STORAGE_KEY);
-        if (local) {
-          try {
-            const parsed = JSON.parse(local);
-            localData = parsed && parsed.storage === 'indexeddb' ? null : parsed;
-          } catch(e) {
-            console.warn('Base local corrompida. Recriando dados iniciais.', e);
-            localStorage.removeItem(STORAGE_KEY);
+      this._largeLocalDeferred = false;
+      this._largeCloudDeferred = false;
+      this._deferredLocalUpdatedAt = '';
+      this._deferredCloudUpdatedAt = '';
+      const local = localStorage.getItem(STORAGE_KEY);
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (parsed && parsed.storage === 'indexeddb' && parsed.large) {
+            this._largeLocalDeferred = true;
+            this._deferredLocalUpdatedAt = parsed.updatedAt || '';
+          } else if (parsed && parsed.storage !== 'indexeddb') {
+            localData = parsed;
           }
+        } catch(e) {
+          console.warn('Base local corrompida. Recriando dados iniciais.', e);
+          localStorage.removeItem(STORAGE_KEY);
         }
+      }
+      if (!localData && !this._largeLocalDeferred) {
+        try { localData = await idbGet(STORAGE_KEY); } catch(e) { console.warn('IndexedDB indisponível. Tentando localStorage.', e); }
       }
       let cloudData = null;
       if (this.usingCloud) {
         try {
-          cloudData = await withTimeout(this.loadCloudPayload(), 6000, 'Leitura do Firestore demorou.');
+          const allowHeavyCloudStartup = !SLIM_MODE && !this._largeLocalDeferred && !localData;
+          cloudData = await withTimeout(this.loadCloudPayload(null, {allowHeavy:allowHeavyCloudStartup}), 2500, 'Leitura do Firestore demorou.');
+          if (cloudData?.deferred) {
+            this._largeCloudDeferred = true;
+            this._deferredCloudUpdatedAt = cloudData.updatedAt || '';
+            cloudData = null;
+          }
           this._cloudReadOk = true;
         } catch(e) {
           console.warn('Falha ao ler dados do Firestore. Usando base local.', e);
@@ -1265,13 +1270,46 @@
         console.warn('Falha ao carregar base de vendas em lotes. Usando payload principal.', e);
       }
       this.data = data;
+      this._dataDeferred = !!(this._largeLocalDeferred || this._largeCloudDeferred);
       // Não salva automaticamente na abertura. Em bases grandes, um save no login força JSON.stringify/IndexedDB
       // de todo o payload e era uma das causas do travamento inicial. A nuvem/local só são gravados
       // após ação real do usuário, importação ou edição.
       invalidatePerfCaches();
       this._initializing = false;
-      this.startCloudListener();
+      // No modo enxuto não mantemos listener em tempo real para evitar baixar/reprocessar payload grande sozinho.
+      if (!SLIM_MODE) this.startCloudListener();
       return data;
+    },
+    async loadFullDataNow(onProgress=null){
+      this._loadingFullData = true;
+      try {
+        onProgress?.('Carregando cópia local salva no navegador...');
+        let localData = null;
+        try { localData = await idbGet(STORAGE_KEY); } catch(e) { console.warn('Falha ao carregar IndexedDB completo.', e); }
+        onProgress?.('Carregando dados completos do Firebase, se necessário...');
+        let cloudData = null;
+        if (this.usingCloud) {
+          try { cloudData = await this.loadCloudPayload(null, {allowHeavy:true}); }
+          catch(e) { console.warn('Falha ao carregar payload completo da nuvem.', e); }
+        }
+        let data = chooseStartupData(localData, cloudData) || localData || cloudData?.payload || this.data || this.seed();
+        data = migrate(data);
+        try {
+          const chunkedSales = await loadSalesChunks();
+          if (Array.isArray(chunkedSales) && chunkedSales.length && (!Array.isArray(data.sales) || chunkedSales.length > data.sales.length || data._salesStorage === 'indexeddb-chunks')) {
+            data.sales = chunkedSales;
+          }
+        } catch(e) { console.warn('Falha ao carregar base de vendas em lotes.', e); }
+        this.data = data;
+        this._largeLocalDeferred = false;
+        this._largeCloudDeferred = false;
+        this._dataDeferred = false;
+        invalidatePerfCaches();
+        onProgress?.('Base completa carregada.');
+        return this.data;
+      } finally {
+        this._loadingFullData = false;
+      }
     },
     seed(){
       const products = (window.DEFAULT_PRODUCTS || []).map(p => ({...p}));
@@ -1364,6 +1402,11 @@
       });
     },
     async save({skipCloud=false, onProgress=null, skipSalesChunks=false}={}){
+      if (this._dataDeferred || this._largeLocalDeferred || this._largeCloudDeferred) {
+        this.lastSaveWarning = 'Base completa ainda não foi carregada. Clique em Carregar base completa antes de salvar/importar para evitar sobrescrever dados antigos.';
+        console.warn(this.lastSaveWarning);
+        return;
+      }
       invalidatePerfCaches();
       const updatedAt = new Date().toISOString();
       this.lastSaveWarning = '';
@@ -2757,7 +2800,7 @@
 
   function userCanAccessPage(page, user=state.session){
     if (!user) return false;
-    if (user.role === 'admin') return true;
+    if (user.role === 'admin') return ADMIN_PAGES.some(x => x.id === page);
     if (user.role === 'commercial') {
       const p = ADMIN_PAGES.find(x => x.id === page);
       if (!p || p.adminOnly) return false;
@@ -4122,6 +4165,7 @@
         toast('Seu usuário não tem permissão para essa função.', 'warn');
       }
     }
+    if (isFullDataDeferred() && state.page !== 'dashboard') return renderDeferredDataNotice();
     switch(state.page){
       case 'dashboard': return renderDashboard();
       case 'dashboard-apresentacao': return renderDashboardPresentation();
@@ -4246,59 +4290,103 @@
     return pending;
   }
 
-  function renderDashboardOverview(metrics, orderSummary){
-    const today = todayISO();
-    const activeOffers = (Store.data.offers || []).filter(o => offerIsActiveOn(o, today)).length;
-    const openTickets = (Store.data.tickets || []).filter(t => t.status === 'ABERTO').length;
-    const activeTickets = (Store.data.tickets || []).filter(t => ['ABERTO','EM_ATENDIMENTO'].includes(t.status)).length;
-    const relevantIssues = (Store.data.importIssues || []).filter(importIssueStillRelevant);
-    const criticalPending = computeCriticalRuptureAlerts({onlyPending:true}).length;
-    const closingDate = latestOperationalDate();
-    const closing = computeDayClosing(closingDate, state.filters.rede || '');
-    const pricePending = computePricePendingCount(today);
-    const pendingCount = (closing.status === 'OK' ? 0 : closing.blockers.length) + relevantIssues.length + openTickets + criticalPending + pricePending + orderSummary.lowStockStores;
+  function isFullDataDeferred(){
+    return !!(Store._dataDeferred || Store._largeLocalDeferred || Store._largeCloudDeferred);
+  }
+
+  function deferredDataNoticeHtml(){
+    if (!isFullDataDeferred()) return '';
+    return `
+      <div class="card warning-row" style="margin-bottom:14px">
+        <h3>⚠ Sistema iniciado em modo leve</h3>
+        <p class="muted">Existe uma base grande salva no navegador/Firebase. Para evitar travamento na abertura, ela não foi carregada automaticamente.</p>
+        <p class="muted small">Antes de importar, salvar ou analisar dados antigos, clique em <strong>Carregar base completa</strong>. Isso preserva os dados já salvos e evita sobrescrever a base antiga.</p>
+        <div class="footer-actions"><button class="btn btn-primary" onclick="App.loadFullData()">Carregar base completa</button></div>
+      </div>`;
+  }
+
+  function renderDeferredDataNotice(){
+    setTitle('Base grande em modo leve', 'Carregue a base completa somente quando for usar importações, pedidos, conciliação ou resultado.');
+    $('#viewRoot').innerHTML = deferredDataNoticeHtml() || `<div class="empty">Base completa já carregada.</div>`;
+  }
+
+  function computeLiteDashboardMetrics(f={}){
+    const allowedTypes = selectedTypes(f.tipo || 'AMBOS');
+    const storesById = new Map((Store.data.stores || []).map(st => [st.id, st]));
+    const productsById = new Map((Store.data.products || []).map(p => [p.id, p]));
+    const notes = new Set();
+    const stores = new Set();
+    const dates = new Set();
+    let vendaValida = 0;
+    let entregaQtd = 0;
+    let rows = 0;
+    for (const d of (Store.data.deliveries || [])) {
+      const st = storesById.get(d.storeId);
+      const p = productsById.get(d.productId);
+      if (f.rede && st?.rede !== f.rede) continue;
+      if (f.loja && d.storeId !== f.loja) continue;
+      if (p && !allowedTypes.includes(p.tipo)) continue;
+      if (!dateInRange(d.date, f.dateFrom, f.dateTo)) continue;
+      rows += 1;
+      vendaValida += validValue(d);
+      entregaQtd += validQty(d);
+      if (d.storeId) stores.add(d.storeId);
+      if (d.date) dates.add(d.date);
+      notes.add(d.importGroupKey || d.orderNumber || d.id || `${d.fileName||''}|${d.storeId||''}`);
+    }
+    let quebra = 0;
+    for (const o of (Store.data.orders || [])) {
+      const st = storesById.get(o.storeId);
+      if (f.rede && st?.rede !== f.rede) continue;
+      if (f.loja && o.storeId !== f.loja) continue;
+      if (!dateInRange(o.date, f.dateFrom, f.dateTo)) continue;
+      if (!allowedTypes.includes(o.type)) continue;
+      for (const line of Object.values(o.lines || {})) {
+        const cost = latestCost(o.storeId, line.productId, o.date);
+        quebra += toNumber(line.quebraQty) * cost;
+      }
+    }
+    const dupPending = (Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length;
+    const baseImports = (Store.data.salesImports || []).length;
+    return {vendaValida, quebra, entregaQtd, rows, notes:notes.size, stores:stores.size, dates:dates.size, dupPending, baseImports};
+  }
+
+  function renderDashboardOverview(metrics){
     const periodLabel = state.filters.dateFrom || state.filters.dateTo
       ? `${state.filters.dateFrom ? formatDate(state.filters.dateFrom) : 'início'} até ${state.filters.dateTo ? formatDate(state.filters.dateTo) : 'hoje'}`
-      : 'Visão geral';
+      : 'Visão geral leve';
     return `
       <section class="clear-hero">
         <div>
-          <span class="eyebrow">Central de controle</span>
-          <h1>O que precisa de atenção agora</h1>
-          <p>Visão resumida das pendências comerciais, operacionais e de importação. As tabelas ficam nas abas específicas para reduzir poluição visual.</p>
+          <span class="eyebrow">Central comercial enxuta</span>
+          <h1>Operação principal</h1>
+          <p>Esta versão prioriza velocidade: histórico completo, fechamento, rupturas, preços, chamados e dashboard TV foram retirados do carregamento principal.</p>
           <div class="hero-status-row">
             <span class="status-chip">${escapeHtml(periodLabel)}</span>
-            <span class="status-chip ${pendingCount ? 'amber' : 'green'}">${pendingCount ? `${pendingCount} ponto(s) de atenção` : 'Tudo sem alerta crítico'}</span>
+            <span class="status-chip green">modo enxuto ativo</span>
           </div>
         </div>
-        <div class="clear-hero-score ${pendingCount ? 'amber' : 'green'}">
-          <span>${fmt.format(pendingCount)}</span>
-          <small>pendências</small>
+        <div class="clear-hero-score green">
+          <span>${fmt.format(metrics.dupPending)}</span>
+          <small>duplicidades pendentes</small>
         </div>
       </section>
-      <div class="clear-task-grid">
-        ${clearTaskCard('Fechamento do dia', closing.status === 'OK' ? 'OK' : closing.blockers.length, `Data ${formatDate(closingDate)}`, 'fechamento-dia', closing.status === 'OK' ? 'green' : 'amber')}
-        ${clearTaskCard('Importações / divergências', fmt.format(relevantIssues.length), 'PDF, XML ou Base para conferir', 'conferencia-importacao', relevantIssues.length ? 'amber' : 'green')}
-        ${clearTaskCard('Duplicidades pendentes', fmt.format((Store.data.importDuplicates || []).filter(d => d.status === 'PENDENTE').length), 'aguardando decisão do operador', 'duplicidades', (Store.data.importDuplicates || []).some(d => d.status === 'PENDENTE') ? 'amber' : 'green')}
-        ${clearTaskCard('Chamados abertos', fmt.format(openTickets), `${fmt.format(activeTickets)} ativos no total`, 'chamados', openTickets ? 'amber' : 'green')}
-        ${clearTaskCard('Rupturas pendentes', fmt.format(criticalPending), 'itens obrigatórios sem justificativa', 'rupturas', criticalPending ? 'red' : 'green')}
-        ${clearTaskCard('Preços pendentes', fmt.format(pricePending), 'lojas sem coleta obrigatória', 'precos', pricePending ? 'red' : 'green')}
-        ${clearTaskCard('Estoque baixo', fmt.format(orderSummary.lowStockStores), 'lojas com risco de falta', 'estoque-loja', orderSummary.lowStockStores ? 'red' : 'green')}
-      </div>
       <div class="grid four executive-strip compact-strip">
-        ${kpi('▥','Venda válida',money.format(metrics.vendaValida),'resultado do filtro atual')}
-        ${kpi('↘','Quebra',money.format(metrics.quebra),'valor por custo', metrics.quebra ? 'red' : 'green')}
-        ${kpi('🏷','Ofertas ativas',fmt.format(activeOffers),'válidas hoje', activeOffers ? 'amber' : 'green')}
-        ${kpi('!','Lojas em atenção',fmt.format(orderSummary.attentionStores),'pedido/estoque em alerta', orderSummary.attentionStores ? 'amber' : 'green')}
+        ${kpi('▥','Venda acumulada',money.format(metrics.vendaValida),'entrega válida no filtro')}
+        ${kpi('↘','Quebra acumulada',money.format(metrics.quebra),'valor informado em pedidos', metrics.quebra ? 'red' : 'green')}
+        ${kpi('▣','Entregas importadas',fmt.format(metrics.notes),`${fmt.format(metrics.rows)} itens de nota`)}
+        ${kpi('◈','Bases de venda',fmt.format(metrics.baseImports),'planilhas importadas')}
       </div>`;
   }
 
   function renderClearModules(){
     const modules = [
-      ['Importações', 'PDF/XML, Base de Vendas e Conferência', 'importar-pdf', '▣'],
-      ['Comercial', 'Pedidos, preços, ofertas e análises', 'analise-pedidos', '▤'],
-      ['Operação', 'Inventário, estoque, rupturas e quebras', 'inventario-saida', '▨'],
-      ['Atendimento', 'Chamados, responsáveis e resolução', 'chamados', '✉']
+      ['Importar XML/PDF', 'Entrada de NF-e, PDF ou ZIP com progresso.', 'importar-pdf', '▣'],
+      ['Base de Vendas', 'Importar Excel e consolidar venda por data/loja/produto.', 'bases', '▤'],
+      ['Conciliação', 'Ligar data de entrega com datas base de venda.', 'conciliacao', '◈'],
+      ['Pedidos', 'Análise comercial e sugestão de pedidos.', 'analise-pedidos', '▤'],
+      ['Resultado do Pedido', 'Pós-entrega: excesso, quebra, saída estimada e ação.', 'resultado-pedido', '◬'],
+      ['Duplicidades', 'Resolver XML/PDF/Base duplicados sem somar automaticamente.', 'duplicidades', '⧉']
     ];
     return `<div class="module-grid">${modules.map(m => `
       <button class="module-card" onclick="App.go('${m[2]}')">
@@ -4307,40 +4395,24 @@
   }
 
   function renderDashboard(){
-    setTitle('Visão Geral', 'Painel limpo com pendências e atalhos principais.');
+    setTitle('Visão Geral', 'Painel leve com somente os módulos essenciais.');
     const f = state.filters;
     if (!f.tipo) f.tipo = 'AMBOS';
-    const metrics = computeMetrics(f);
-    const stores = getStoresByFilter(f).filter(st=>!f.loja || st.id===f.loja);
-    const orderSummary = summarizeOrderHealth(stores, f.tipo || 'AMBOS');
-    const criticalRows = orderSummary.rows.filter(r=>r.lowStock || r.excess || r.attention).slice(0,8);
+    const metrics = isFullDataDeferred() ? {vendaValida:0, quebra:0, entregaQtd:0, rows:0, notes:0, stores:0, dates:0, dupPending:0, baseImports:0} : computeLiteDashboardMetrics(f);
     $('#viewRoot').innerHTML = `
-      ${renderDashboardOverview(metrics, orderSummary)}
+      ${deferredDataNoticeHtml()}
+      ${renderDashboardOverview(metrics)}
       <div class="clear-toolbar">
         ${adminFiltersHtml('dash')}
       </div>
-      <div class="clear-section-grid">
-        <div class="card clear-panel">
-          <div class="panel-head"><div><h3>Módulos principais</h3><p class="muted small">Escolha uma área para abrir os detalhes.</p></div></div>
-          ${renderClearModules()}
-        </div>
-        <div class="card clear-panel">
-          <div class="panel-head"><div><h3>Lojas críticas</h3><p class="muted small">Mostra somente os principais pontos de atenção.</p></div><button class="btn btn-sm btn-soft" onclick="App.go('analise-pedidos')">Ver análise</button></div>
-          ${renderOrderHealthTable(criticalRows)}
-        </div>
+      <div class="card clear-panel">
+        <div class="panel-head"><div><h3>Módulos mantidos nesta versão</h3><p class="muted small">Os módulos pesados foram retirados do carregamento para reduzir travamento.</p></div></div>
+        ${renderClearModules()}
       </div>
-      <details class="card clear-details">
-        <summary>Ver gráficos e listas detalhadas</summary>
-        <div class="grid two" style="margin-top:14px">
-          <div class="chart-panel"><h3>Venda x Quebra</h3>${renderSimpleChart(f)}</div>
-          <div><h3>Lojas que precisam de atenção</h3>${renderOrderHealthTable(orderSummary.rows.slice(0,10))}</div>
-        </div>
-        <div class="grid three" style="margin-top:14px">
-          ${miniPanel('Lojas com excesso', renderStoreList(orderSummary.rows.filter(r=>r.excess).slice(0,8), 'excesso'))}
-          ${miniPanel('Lojas com estoque baixo', renderStoreList(orderSummary.rows.filter(r=>r.lowStock).slice(0,8), 'baixo'))}
-          ${miniPanel('Pendências e rupturas', `<p>Rupturas abertas <strong class="negative">${computeRuptures(f).length}</strong></p><p>Pendências de bandejas <strong class="negative">${computePendencies().filter(p=>p.pending>0).length}</strong></p><button class="btn btn-sm btn-soft" onclick="App.go('rupturas')">Ver rupturas</button>`) }
-        </div>
-      </details>`;
+      <div class="card" style="margin-top:14px">
+        <h3>O que saiu do carregamento principal</h3>
+        <p class="muted small">Histórico completo, calendário pesado de importações, resumo automático por loja/nota, conferência completa, dashboard apresentação, fechamento do dia, preços, chamados, rupturas, itens obrigatórios, pendências, mix e relatórios antigos.</p>
+      </div>`;
     bindAdminFilters('dash');
   }
 
@@ -5877,15 +5949,13 @@
 
 
   function renderImportPdf(){
-    setTitle('Importar XML/PDF/ZIP de Entrega', 'Use esta tela para importar entregas/faturamento. Dia a Dia e Comper/Fort podem entrar por XML/ZIP; Costa pode continuar em PDF.');
-    const noteSummaries = deliveryImportSummaries().slice(0,80);
-    const fileSummaries = deliveryFileSummaries().slice(0,80);
-    const issues = Store.data.importIssues.filter(i=>['PDF','XML'].includes(i.type) && importIssueStillRelevant(i)).slice(-40).reverse();
+    setTitle('Importar XML/PDF/ZIP de Entrega', 'Tela enxuta para importar sem carregar histórico, calendário ou resumo pesado automaticamente.');
+    if (isFullDataDeferred()) return renderDeferredDataNotice();
     $('#viewRoot').innerHTML = `
       <div class="grid two">
         <div class="card import-flow-card">
-          <h3>1. Nova importação de XML/PDF</h3>
-          <p class="muted">Importe XML de NF-e ativa para Dia a Dia e Comper/Fort, ou PDF para Costa. ZIP com XMLs/PDFs também é aceito. XML de NF cancelada é rejeitado e registrado na conferência.</p>
+          <h3>Nova importação de XML/PDF</h3>
+          <p class="muted">Importe XML de NF-e ativa para Dia a Dia e Comper/Fort, ou PDF para Costa. ZIP com XMLs/PDFs também é aceito. XML de NF cancelada é rejeitado e registrado para conferência.</p>
           <label>Rede do arquivo
             <select id="pdfRede">
               <option value="">Identificar automaticamente</option>
@@ -5897,54 +5967,26 @@
           </label>
           <div class="import-steps">
             <span>1. Selecionar arquivo</span>
-            <span>2. Ler dados</span>
-            <span>3. Mostrar divergências</span>
-            <span>4. Salvar no histórico</span>
+            <span>2. Processar em lotes</span>
+            <span>3. Mostrar resultado da sessão</span>
+            <span>4. Salvar controlado</span>
           </div>
           <div class="footer-actions"><button id="processPdf" class="btn btn-primary">Ler e importar arquivos</button></div>
           <div id="pdfImportLog" class="empty" style="margin-top:12px">Nenhum arquivo processado nesta sessão.</div>
         </div>
         <div class="card import-help-card">
-          <h3>O que o XML/PDF alimenta?</h3>
+          <h3>Modo performance ativo</h3>
           <div class="mini-list">
-            <div><strong>Entrega válida</strong><span>Quantidade importada menos faltas e qualidade.</span></div>
-            <div><strong>Sugestão comercial</strong><span>Quantidade enviada conforme NF-e ou PDF.</span></div>
-            <div><strong>Custo do produto</strong><span>Usado em quebra, falta e qualidade.</span></div>
-            <div><strong>Pendências de bandejas</strong><span>Baixa automática conforme entrega válida.</span></div>
+            <div><strong>Não carrega histórico antigo</strong><span>Evita varrer todas as entregas ao abrir a tela.</span></div>
+            <div><strong>Não monta calendário automático</strong><span>Calendário de importações saiu desta versão enxuta.</span></div>
+            <div><strong>Não monta resumo por nota</strong><span>Resumo completo deve ficar fora do carregamento principal.</span></div>
+            <div><strong>Divergências da sessão</strong><span>O resultado aparece no log da importação atual.</span></div>
           </div>
         </div>
       </div>
-
-      <div class="card pdf-calendar-card" style="margin-top:14px">
-        <h3>Calendário de importações de XML/PDF</h3>
-        <p class="muted">Confira rapidamente quais datas já estão completas e quais ainda têm rede pendente, independentemente de entrar por XML ou PDF.</p>
-        ${renderPdfImportCalendar()}
-      </div>
-
       <div class="card" style="margin-top:14px">
-        <h3>Histórico de XML/PDF importados</h3>
-        <p class="muted">Exclua aqui um arquivo importado. A exclusão remove automaticamente entregas, custos, sugestão comercial, faltas/qualidade e impactos vinculados a essa importação.</p>
-        ${renderPdfImportHistory(fileSummaries)}
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <h3>Resumo por loja/nota</h3>
-        <p class="muted">Visualização consolidada por nota: quantidade de itens, quantidade total entregue e valor total.</p>
-        ${renderDeliveryImportSummary(noteSummaries)}
-      </div>
-
-      <div class="card" style="margin-top:14px">
-        <div class="panel-head">
-          <div>
-            <h3>Divergências de reconhecimento</h3>
-            <p class="muted">Quando loja, produto, data, custo ou quantidade não forem reconhecidos no XML/PDF, o erro aparece aqui para conferência.</p>
-          </div>
-          <div class="footer-actions compact-actions">
-            <button class="btn btn-sm btn-soft" type="button" onclick="App.cleanResolvedImportIssues()">Ocultar corrigidos</button>
-            <button class="btn btn-sm btn-danger" type="button" onclick="App.clearImportIssues()">Limpar</button>
-          </div>
-        </div>
-        ${renderImportIssues(issues)}
+        <h3>Histórico removido do carregamento</h3>
+        <p class="muted small">Para destravar o sistema, esta tela não calcula mais histórico de XML/PDF, resumo por loja/nota nem divergências antigas automaticamente. Os dados antigos continuam preservados na base.</p>
       </div>
     `;
     $('#processPdf').addEventListener('click', processPdfFiles);
@@ -9589,7 +9631,9 @@
         const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
         if (!exists) Store.data.users.push(found);
         const skipCloudDuringStartup = !!(Store._initializing && Store.usingCloud && !Store._cloudReadComplete);
-        Store.save({skipCloud: skipCloudDuringStartup}).catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
+        if (!isFullDataDeferred()) {
+          Store.save({skipCloud: skipCloudDuringStartup}).catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
+        }
       } catch(saveLoginUserError) {
         console.warn('Falha ao persistir usuário recuperado.', saveLoginUserError);
       }
@@ -10410,8 +10454,28 @@
     await saveAndRender('Base de venda removida.');
   }
 
+  async function loadFullData(){
+    if (Store._loadingFullData) return toast('A base completa já está sendo carregada.', 'warn');
+    const root = $('#viewRoot');
+    if (root) {
+      root.innerHTML = `<div class="card"><h3>Carregando base completa...</h3><p id="fullLoadStatus" class="muted">Iniciando leitura da base grande.</p><div class="pdf-progress-bar"><span style="width:45%"></span></div></div>`;
+    }
+    try {
+      await Store.loadFullDataNow(message => {
+        const el = $('#fullLoadStatus');
+        if (el) el.textContent = message;
+      });
+      toast('Base completa carregada.', 'ok');
+      render();
+    } catch(e) {
+      console.error('Falha ao carregar base completa.', e);
+      toast('Não foi possível carregar a base completa. Tente Ctrl+F5 e carregue novamente.', 'error');
+      renderDashboard();
+    }
+  }
+
   window.App = {
-    go, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, loadFullData, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});
