@@ -5137,7 +5137,7 @@
   // v76 - Dashboard inicial ultraleve para evitar travamento na entrada.
   // Não varre lojas/produtos, não calcula estoque e não monta resultado do pedido no login.
   function renderDashboard(){
-    setTitle('Dashboard Inicial', 'Entrada rápida do sistema. Abra as análises somente quando precisar.');
+    setTitle('Dashboard Inicial', 'Visão geral da operação.');
     const importIssuesCount = Array.isArray(Store.data?.importIssues) ? Store.data.importIssues.filter(importIssueStillRelevant).length : 0;
     const duplicatesCount = Array.isArray(Store.data?.importDuplicates) ? Store.data.importDuplicates.filter(d => d.status === 'PENDENTE').length : 0;
     const ticketsCount = Array.isArray(Store.data?.tickets) ? Store.data.tickets.filter(t => ['ABERTO','EM_ATENDIMENTO'].includes(t.status)).length : 0;
@@ -5160,12 +5160,8 @@
         <div class="card exec-hero-card">
           <div>
             <span class="eyebrow">Acesso rápido</span>
-            <h1>Dashboard inicial</h1>
-            <p>Esta tela foi deixada leve para o sistema abrir sem travar. Os cálculos completos carregam apenas quando você acessa cada módulo.</p>
-            <div class="hero-status-row">
-              <span class="status-chip green">Entrada leve ativada</span>
-              <span class="status-chip">Sem varredura geral de lojas/produtos</span>
-            </div>
+            <h1>Dashboard Inicial</h1>
+            <p>Visão geral da operação</p>
           </div>
           <div class="exec-hero-actions">
             <button class="btn btn-primary" onclick="App.go('analise-pedidos')">▤ Pedidos</button>
