@@ -428,6 +428,10 @@ body.store-mobile .footer-actions{
 .pdf-calendar-day.green{border-color:#267a3a;background:linear-gradient(180deg,rgba(19,66,32,.92),rgba(13,39,21,.92))}
 .pdf-calendar-day.amber{border-color:#a87915;background:linear-gradient(180deg,rgba(63,45,7,.92),rgba(37,28,8,.92))}
 .pdf-calendar-day.red{border-color:#884040;background:linear-gradient(180deg,rgba(55,21,23,.9),rgba(30,17,18,.9))}
+
+.pdf-calendar-day.blue{border-color:#236f94;background:linear-gradient(180deg,rgba(13,39,52,.92),rgba(10,27,36,.92))}
+.pdf-calendar-day.gray{border-color:#334650;background:linear-gradient(180deg,rgba(24,38,47,.88),rgba(12,24,32,.88))}
+.dot.gray{background:#7f8b93}
 .pdf-calendar-day.is-selected{box-shadow:0 0 0 3px rgba(255,255,255,.12);outline:1px solid rgba(255,255,255,.25)}
 .pdf-calendar-number{font-size:1.05rem;font-weight:900;color:#fff}
 .pdf-calendar-status{font-size:.8rem;font-weight:900;color:#fff}

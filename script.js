@@ -10569,54 +10569,256 @@
     </table></div>`;
   }
 
+  function baseControlStatusMeta(summary){
+    if (!summary || !summary.hasData) return {cls:'gray', label:'Sem dados', weight:0};
+    if (summary.hasIssue) return {cls:'red', label:'Erro', weight:5};
+    if (summary.hasDuplicate) return {cls:'amber', label:'Duplicidade', weight:4};
+    if (summary.hasBasePending) return {cls:'red', label:'Base pendente', weight:4};
+    if (summary.hasConciliationPending) return {cls:'amber', label:'Conc. pendente', weight:3};
+    if (summary.hasDeliveryPending) return {cls:'amber', label:'Entrega pendente', weight:3};
+    if (summary.hasDelivery) return {cls:'green', label:'OK', weight:1};
+    if (summary.hasBase) return {cls:'blue', label:'Base importada', weight:1};
+    return {cls:'gray', label:'Sem dados', weight:0};
+  }
+
+  function buildBaseControlDayMap(data){
+    const map = new Map();
+    const ensure = date => {
+      if (!map.has(date)) map.set(date, {
+        date,
+        hasData:false,
+        hasBase:false,
+        hasDelivery:false,
+        hasIssue:false,
+        hasDuplicate:false,
+        hasBasePending:false,
+        hasConciliationPending:false,
+        hasDeliveryPending:false,
+        redes:new Set(),
+        baseRows:[],
+        deliveryRows:[],
+        pendingRows:[],
+        qtyBase:0,
+        qtyDelivery:0
+      });
+      return map.get(date);
+    };
+    for (const row of (data.baseRows || [])) {
+      if (!row.date) continue;
+      const day = ensure(row.date);
+      day.hasData = true;
+      day.hasBase = true;
+      if (row.rede) day.redes.add(row.rede);
+      if (row.issueCount) day.hasIssue = true;
+      if (row.duplicateCount) day.hasDuplicate = true;
+      day.qtyBase += toNumber(row.qty);
+      day.baseRows.push(row);
+    }
+    for (const row of (data.deliveryRows || [])) {
+      if (!row.date) continue;
+      const day = ensure(row.date);
+      day.hasData = true;
+      if (row.records) day.hasDelivery = true;
+      if (row.rede) day.redes.add(row.rede);
+      if (row.issueCount) day.hasIssue = true;
+      if (row.duplicateCount) day.hasDuplicate = true;
+      if (row.statusLabel === 'Base pendente') day.hasBasePending = true;
+      if (row.statusLabel === 'Conciliação pendente') day.hasConciliationPending = true;
+      if (row.statusLabel === 'Entrega pendente') day.hasDeliveryPending = true;
+      if (row.statusLabel !== 'OK') day.pendingRows.push(row);
+      day.qtyDelivery += toNumber(row.qty);
+      day.deliveryRows.push(row);
+    }
+    return map;
+  }
+
+  function baseControlDetailRowsForDate(data, date){
+    const byRede = new Map();
+    const ensure = rede => {
+      const key = rede || 'Rede não identificada';
+      if (!byRede.has(key)) byRede.set(key, {
+        rede:key,
+        baseRows:[],
+        deliveryRows:[],
+        baseQty:0,
+        deliveryQty:0,
+        stores:new Set(),
+        products:new Set(),
+        notes:new Set(),
+        statuses:new Set(),
+        baseDates:new Set(),
+        issueCount:0,
+        duplicateCount:0
+      });
+      return byRede.get(key);
+    };
+    for (const row of (data.baseRows || []).filter(r => r.date === date)) {
+      const item = ensure(row.rede);
+      item.baseRows.push(row);
+      item.baseQty += toNumber(row.qty);
+      (row.stores || new Set()).forEach(v => item.stores.add(v));
+      (row.products || new Set()).forEach(v => item.products.add(v));
+      item.issueCount += toNumber(row.issueCount);
+      item.duplicateCount += toNumber(row.duplicateCount);
+    }
+    for (const row of (data.deliveryRows || []).filter(r => r.date === date)) {
+      const item = ensure(row.rede);
+      item.deliveryRows.push(row);
+      item.deliveryQty += toNumber(row.qty);
+      (row.stores || new Set()).forEach(v => item.stores.add(v));
+      (row.products || new Set()).forEach(v => item.products.add(v));
+      (row.notes || new Set()).forEach(v => item.notes.add(v));
+      (row.baseDates || []).forEach(v => item.baseDates.add(v));
+      if (row.statusLabel && row.statusLabel !== 'OK') item.statuses.add(row.statusLabel);
+      item.issueCount += toNumber(row.issueCount);
+      item.duplicateCount += toNumber(row.duplicateCount);
+    }
+    return Array.from(byRede.values()).sort((a,b)=>String(a.rede).localeCompare(String(b.rede),'pt-BR'));
+  }
+
+  function renderBaseControlDayDetail(date, data){
+    const rows = baseControlDetailRowsForDate(data, date);
+    const dayMap = buildBaseControlDayMap(data);
+    const summary = dayMap.get(date);
+    const meta = baseControlStatusMeta(summary);
+    if (!rows.length) {
+      return `<div class="pdf-calendar-detail">
+        <div><strong>${formatDate(date)}</strong><span class="badge gray">Sem movimento</span></div>
+        <p class="muted small">Não há base, entrega ou conciliação registrada para esta data no filtro selecionado.</p>
+      </div>`;
+    }
+    return `<div class="pdf-calendar-detail">
+      <div>
+        <strong>${formatDate(date)}</strong>
+        <span class="badge ${meta.cls}">${escapeHtml(meta.label)}</span>
+        <span class="muted small">${fmt.format(summary?.redes?.size || 0)} rede(s) no filtro</span>
+      </div>
+      <div class="pdf-calendar-detail-grid">
+        <div><span>Bases do dia</span><strong>${fmt.format((summary?.baseRows || []).length)} rede/data • ${fmt.format(summary?.qtyBase || 0)} und</strong></div>
+        <div><span>Entregas do dia</span><strong>${fmt.format((summary?.deliveryRows || []).length)} linha(s) resumo • ${fmt.format(summary?.qtyDelivery || 0)} und</strong></div>
+        <div><span>Pendências</span><strong class="${summary?.pendingRows?.length ? 'negative' : 'positive'}">${fmt.format(summary?.pendingRows?.length || 0)}</strong></div>
+        <div><span>Redes</span><strong>${Array.from(summary?.redes || []).map(escapeHtml).join(', ') || '—'}</strong></div>
+      </div>
+      <div class="table-wrap base-control-detail-table"><table>
+        <thead><tr><th>Rede</th><th>Base de venda</th><th>Entrega</th><th>Conciliação</th><th>Datas base vinculadas</th><th class="num">Qtd base</th><th class="num">Qtd entrega</th></tr></thead>
+        <tbody>${rows.map(row => {
+          const hasBase = row.baseRows.length > 0;
+          const hasDelivery = row.deliveryRows.some(r => r.records > 0);
+          const statuses = Array.from(row.statuses);
+          const statusLabel = row.issueCount ? 'Erro de importação' : (row.duplicateCount ? 'Duplicidade pendente' : (statuses.length ? statuses.join(', ') : (hasDelivery ? 'OK' : '—')));
+          const cls = row.issueCount ? 'red' : (row.duplicateCount || statuses.length ? 'amber' : (hasDelivery ? 'green' : 'gray'));
+          return `<tr>
+            <td><strong>${escapeHtml(row.rede)}</strong></td>
+            <td>${hasBase ? `<span class="badge green">Importada</span>` : '<span class="badge gray">Sem base do dia</span>'}</td>
+            <td>${hasDelivery ? `<span class="badge green">Importada</span>` : '<span class="badge gray">Sem entrega</span>'}</td>
+            <td><span class="badge ${cls}">${escapeHtml(statusLabel)}</span></td>
+            <td>${row.baseDates.size ? Array.from(row.baseDates).sort().map(d => `<span class="badge green">${formatDate(d)}</span>`).join(' ') : '<span class="muted">Não definida</span>'}</td>
+            <td class="num">${fmt.format(row.baseQty || 0)}</td>
+            <td class="num">${fmt.format(row.deliveryQty || 0)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  function renderBaseControlCalendar(data, monthKey){
+    const [year, month] = String(monthKey || todayISO().slice(0,7)).split('-').map(Number);
+    const first = new Date(year, month - 1, 1);
+    const last = new Date(year, month, 0);
+    const dayMap = buildBaseControlDayMap(data);
+    const monthDatesWithData = Array.from(dayMap.keys()).filter(d => d.startsWith(monthKey)).sort();
+    const selectedDate = (state.baseControl.selectedDate && state.baseControl.selectedDate.startsWith(monthKey))
+      ? state.baseControl.selectedDate
+      : (monthDatesWithData[monthDatesWithData.length - 1] || `${monthKey}-01`);
+    state.baseControl.selectedDate = selectedDate;
+    const blanks = Array.from({length:first.getDay()}, () => '<div class="pdf-calendar-day is-empty"></div>');
+    const days = [];
+    for (let day = 1; day <= last.getDate(); day++) {
+      const date = `${monthKey}-${String(day).padStart(2,'0')}`;
+      const summary = dayMap.get(date);
+      const meta = baseControlStatusMeta(summary);
+      const countText = summary?.hasData ? `${summary.redes.size} rede(s)` : 'sem dados';
+      days.push(`<button class="pdf-calendar-day ${meta.cls} ${date === selectedDate ? 'is-selected' : ''}" onclick="App.selectBaseControlDay('${date}')" title="${escapeHtml(meta.label)} - ${escapeHtml(countText)}">
+        <span class="pdf-calendar-number">${day}</span>
+        <span class="pdf-calendar-status">${escapeHtml(meta.label)}</span>
+        <span class="pdf-calendar-count">${escapeHtml(countText)}</span>
+      </button>`);
+    }
+    return `
+      <div class="pdf-calendar-head">
+        <button class="btn btn-sm btn-soft" type="button" onclick="App.changeBaseControlMonth(-1)">‹ Mês anterior</button>
+        <div>
+          <strong>${pdfCalendarMonthLabel(monthKey)}</strong>
+          <span class="muted small">Clique em um dia para ver base, entrega e conciliação por rede.</span>
+        </div>
+        <button class="btn btn-sm btn-soft" type="button" onclick="App.changeBaseControlMonth(1)">Próximo mês ›</button>
+      </div>
+      <div class="pdf-calendar-legend">
+        <span><i class="dot green"></i>OK</span>
+        <span><i class="dot amber"></i>Pendente</span>
+        <span><i class="dot red"></i>Base/erro pendente</span>
+        <span><i class="dot blue"></i>Base importada</span>
+        <span><i class="dot gray"></i>Sem dados</span>
+      </div>
+      <div class="pdf-calendar-weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div>
+      <div class="pdf-calendar-grid">${blanks.join('')}${days.join('')}</div>
+      ${renderBaseControlDayDetail(selectedDate, data)}`;
+  }
+
+  function changeBaseControlMonth(offset){
+    const current = state.baseControl.month || todayISO().slice(0,7);
+    const [y,m] = current.split('-').map(Number);
+    const d = new Date(y, (m - 1) + offset, 1);
+    state.baseControl.month = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    state.baseControl.selectedDate = '';
+    renderBaseControl();
+  }
+
+  function selectBaseControlDay(date){
+    state.baseControl.selectedDate = date;
+    renderBaseControl();
+  }
+
   function bindBaseControlEvents(){
-    $('#baseControlRede')?.addEventListener('change', e => { state.baseControl.rede = e.target.value; renderBaseControl(); });
-    $('#baseControlMonth')?.addEventListener('change', e => { state.baseControl.month = e.target.value; renderBaseControl(); });
-    $('#baseControlStatus')?.addEventListener('change', e => { state.baseControl.status = e.target.value; renderBaseControl(); });
+    $('#baseControlRede')?.addEventListener('change', e => { state.baseControl.rede = e.target.value; state.baseControl.selectedDate = ''; renderBaseControl(); });
+    $('#baseControlMonth')?.addEventListener('change', e => { state.baseControl.month = e.target.value || todayISO().slice(0,7); state.baseControl.selectedDate = ''; renderBaseControl(); });
+    $('#baseControlStatus')?.addEventListener('change', e => { state.baseControl.status = e.target.value; state.baseControl.selectedDate = ''; renderBaseControl(); });
   }
 
   function renderBaseControl(){
-    setTitle('Controle de Bases', 'Resumo leve das bases importadas, entregas e pendências por data.');
+    setTitle('Controle de Bases', 'Calendário leve de bases, entregas e pendências por data.');
     const redes = baseControlRedeOptions();
     const months = baseControlMonthOptions();
-    if (!state.baseControl.month && months.length) state.baseControl.month = months[0];
+    if (!state.baseControl.month) state.baseControl.month = months[0] || todayISO().slice(0,7);
     const selected = state.baseControl || {};
     const data = computeBaseControl({rede:selected.rede || '', month:selected.month || '', status:selected.status || ''});
     const baseDatesCount = new Set(data.baseRows.map(r => `${r.date}|${r.rede}`)).size;
     const deliveryDatesCount = new Set(data.deliveryRows.map(r => `${r.date}|${r.rede}`)).size;
+    const conciliationPendingCount = data.pendingRows.filter(r=>r.statusLabel === 'Conciliação pendente').length;
     $('#viewRoot').innerHTML = `
       ${deferredDataNoticeHtml()}
       <div class="grid kpis">
         ${kpi('▤','Bases importadas',fmt.format(baseDatesCount),'datas base por rede')}
         ${kpi('▣','Entregas encontradas',fmt.format(deliveryDatesCount),'datas de entrega por rede')}
-        ${kpi('◈','Conciliações pendentes',fmt.format(data.pendingRows.filter(r=>r.statusLabel === 'Conciliação pendente').length),'entrega sem data base', data.pendingRows.length ? 'amber' : 'green')}
+        ${kpi('◈','Conciliações pendentes',fmt.format(conciliationPendingCount),'entrega sem data base', conciliationPendingCount ? 'amber' : 'green')}
         ${kpi('!','Pendências totais',fmt.format(data.pendingRows.length),'base, entrega, erro ou duplicidade', data.pendingRows.length ? 'amber' : 'green')}
       </div>
       <div class="card">
         <div class="panel-head">
-          <div><h3>Controle leve por data</h3><p class="muted small">Mostra somente resumo por data e rede. Não carrega item por item na tela.</p></div>
+          <div><h3>Calendário de controle</h3><p class="muted small">Visual mensal leve. Cada dia usa resumo por data/rede, sem carregar item por item.</p></div>
           <div class="footer-actions"><button class="btn btn-soft" type="button" onclick="App.go('bases')">Importar base</button><button class="btn btn-soft" type="button" onclick="App.go('conciliacao')">Conciliar</button></div>
         </div>
         <div class="filter-row">
           <div class="filter">Rede <select id="baseControlRede"><option value="">Todas</option>${redes.map(r=>`<option value="${escapeHtml(r)}" ${selected.rede===r?'selected':''}>${escapeHtml(r)}</option>`).join('')}</select></div>
-          <div class="filter">Mês <select id="baseControlMonth"><option value="">Todos</option>${months.map(m=>`<option value="${escapeHtml(m)}" ${selected.month===m?'selected':''}>${m.split('-').reverse().join('/')}</option>`).join('')}</select></div>
+          <div class="filter">Mês <select id="baseControlMonth">${months.concat(months.includes(selected.month) ? [] : [selected.month]).filter(Boolean).map(m=>`<option value="${escapeHtml(m)}" ${selected.month===m?'selected':''}>${m.split('-').reverse().join('/')}</option>`).join('')}</select></div>
           <div class="filter">Status <select id="baseControlStatus"><option value="">Todos</option>${['OK','Conciliação pendente','Base pendente','Entrega pendente','Erro de importação','Duplicidade pendente'].map(st=>`<option value="${escapeHtml(st)}" ${selected.status===st?'selected':''}>${escapeHtml(st)}</option>`).join('')}</select></div>
         </div>
+        ${renderBaseControlCalendar(data, selected.month)}
       </div>
       <div class="card">
-        <div class="panel-head"><div><h3>Dias pendentes</h3><p class="muted small">Priorize estas datas antes de analisar pedidos ou resultado.</p></div><span class="badge ${data.pendingRows.length ? 'amber' : 'green'}">${data.pendingRows.length ? `${fmt.format(data.pendingRows.length)} pendência(s)` : 'Tudo certo'}</span></div>
-        ${renderDeliveryControlRows(data.pendingRows.slice(0,300))}
-        ${data.pendingRows.length > 300 ? `<p class="muted small">Exibindo 300 pendências para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
-      </div>
-      <div class="card">
-        <div class="panel-head"><div><h3>Bases importadas</h3><p class="muted small">Datas de venda que já estão salvas no sistema.</p></div></div>
-        ${renderBaseImportedRows(data.baseRows.slice(0,500))}
-        ${data.baseRows.length > 500 ? `<p class="muted small">Exibindo 500 datas para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
-      </div>
-      <div class="card">
-        <div class="panel-head"><div><h3>Entregas x Conciliação</h3><p class="muted small">Mostra cada data de entrega, rede e tipo com as bases vinculadas.</p></div></div>
-        ${renderDeliveryControlRows(data.deliveryRows.slice(0,500))}
-        ${data.deliveryRows.length > 500 ? `<p class="muted small">Exibindo 500 linhas para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
+        <div class="panel-head"><div><h3>Pendências do mês</h3><p class="muted small">Lista curta para ação rápida. Use os filtros ou clique no calendário para ver o dia.</p></div><span class="badge ${data.pendingRows.length ? 'amber' : 'green'}">${data.pendingRows.length ? `${fmt.format(data.pendingRows.length)} pendência(s)` : 'Tudo certo'}</span></div>
+        ${renderDeliveryControlRows(data.pendingRows.slice(0,150))}
+        ${data.pendingRows.length > 150 ? `<p class="muted small">Exibindo 150 pendências para manter a tela leve. Use os filtros para reduzir.</p>` : ''}
       </div>
     `;
     bindBaseControlEvents();
@@ -10713,7 +10915,7 @@
   }
 
   window.App = {
-    go, loadFullData, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, loadFullData, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, changeBaseControlMonth, selectBaseControlDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});

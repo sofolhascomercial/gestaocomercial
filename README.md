@@ -590,3 +590,9 @@ Observação: os CNPJs de COSTA JARDIM GOIÁS e COSTA RIO VERDE não foram adici
 - Aba Pedidos/Análise de Pedidos passa a montar o pedido usando datas da Conciliação da Base de Venda.
 - Mostra base de venda, média, sugestão pela média, última entrega, estoque bom atual, pedido sugerido, pedido ajustado, ofertas e item obrigatório.
 - Quebra não entra no cálculo desta aba; permanece para módulo próprio.
+
+## v81 - Controle de Bases em calendário leve
+- Substitui a visualização principal do Controle de Bases por calendário mensal leve.
+- Cada dia mostra o status por resumo de data/rede, sem carregar produto por produto.
+- Ao clicar no dia, exibe base, entrega, conciliação e pendências por rede.
+- Mantém lista curta de pendências do mês para ação rápida.
