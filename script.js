@@ -15,6 +15,12 @@
   const CLOUD_SALES_CHUNK_COLLECTION = 'sales_chunks';
   const CLOUD_SALES_CHUNK_SIZE = 500;
   const CLOUD_CHUNK_SIZE = 700000;
+  const CLOUD_SPLIT_MODE = true;
+  const CLOUD_SPLIT_STORAGE = 'split-v82-collections';
+  const CLOUD_MAIN_COLLECTIONS = ['products','stores','deliveries','sales','orders'];
+  const CLOUD_STORE_COLLECTIONS = ['products','stores','deliveries','sales','orders','priceChecks','inventoryOut','tickets','corrections'];
+  const CLOUD_AUX_COLLECTIONS = ['priceChecks','inventoryOut','tickets','corrections','offers','salesImports','importIssues','importDuplicates','cancelledNfes','deletedImports','closedPendencies','criticalRuptureJustifications','auditLog'];
+  const CLOUD_COLLECTION_BATCH_LIMIT = 420;
   const ADMIN_USER = { usuario: 'gerenciacomercial', senha: 'sofolhas2026', nome: 'Administrador Comercial', role: 'admin' };
   // Modo comercial enxuto: remove módulos pesados do carregamento/navegação principal.
   // As funções antigas continuam no arquivo para não quebrar compatibilidade de dados, mas não são renderizadas automaticamente.
@@ -1079,16 +1085,310 @@
     `;
   }
 
+  function sanitizeFirestoreValue(value){
+    if (value === undefined) return null;
+    if (value === null) return null;
+    if (Array.isArray(value)) return value.map(sanitizeFirestoreValue);
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') {
+      const out = {};
+      Object.entries(value).forEach(([key, val]) => {
+        if (val !== undefined) out[key] = sanitizeFirestoreValue(val);
+      });
+      return out;
+    }
+    return value;
+  }
+
+  function firestoreSafeDocId(prefix, row={}, idx=0){
+    const raw = String(row.id || row.importKey || row.xmlKey || row.key || [row.storeId, row.productId, row.date, row.type, row.orderNumber, idx].filter(Boolean).join('|') || `${prefix}_${idx}`);
+    const safe = raw
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-zA-Z0-9_-]+/g,'_')
+      .replace(/^_+|_+$/g,'')
+      .slice(0, 180);
+    return safe || `${prefix}_${idx}`;
+  }
+
+  function isSplitFirestoreMeta(meta={}){
+    return meta?.storageMode === CLOUD_SPLIT_STORAGE || meta?.storage === CLOUD_SPLIT_STORAGE || meta?.salesStorage === 'collection';
+  }
+
+  function buildSplitCloudSummary(data={}){
+    const deliveries = Array.isArray(data.deliveries) ? data.deliveries : [];
+    const sales = Array.isArray(data.sales) ? data.sales : [];
+    const orders = Array.isArray(data.orders) ? data.orders : [];
+    const byRede = {};
+    deliveries.forEach(row => {
+      const rede = row.rede || storeById(row.storeId)?.rede || 'SEM REDE';
+      byRede[rede] ||= {rede, deliveries:0, deliveryQty:0, deliveryValue:0, sales:0, salesQty:0, orders:0};
+      byRede[rede].deliveries += 1;
+      byRede[rede].deliveryQty += validQty(row);
+      byRede[rede].deliveryValue += validValue(row);
+    });
+    sales.forEach(row => {
+      const rede = row.rede || storeById(row.storeId)?.rede || 'SEM REDE';
+      byRede[rede] ||= {rede, deliveries:0, deliveryQty:0, deliveryValue:0, sales:0, salesQty:0, orders:0};
+      byRede[rede].sales += 1;
+      byRede[rede].salesQty += toNumber(row.qty);
+    });
+    orders.forEach(row => {
+      const rede = row.rede || storeById(row.storeId)?.rede || 'SEM REDE';
+      byRede[rede] ||= {rede, deliveries:0, deliveryQty:0, deliveryValue:0, sales:0, salesQty:0, orders:0};
+      byRede[rede].orders += 1;
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      counts: {
+        products: (data.products || []).length,
+        stores: (data.stores || []).length,
+        deliveries: deliveries.length,
+        sales: sales.length,
+        orders: orders.length
+      },
+      byRede: Object.values(byRede).sort((a,b) => String(a.rede).localeCompare(String(b.rede), 'pt-BR'))
+    };
+  }
+
+  function buildSplitCloudMeta(data={}, updatedAt){
+    const excluded = new Set([...CLOUD_MAIN_COLLECTIONS, ...CLOUD_AUX_COLLECTIONS]);
+    const meta = {};
+    Object.entries(data || {}).forEach(([key, value]) => {
+      if (!excluded.has(key)) meta[key] = value;
+    });
+    meta.storage = CLOUD_SPLIT_STORAGE;
+    meta.storageMode = CLOUD_SPLIT_STORAGE;
+    meta.updatedAt = updatedAt;
+    meta.payload = null;
+    meta.chunkCount = 0;
+    meta.salesStorage = 'collection';
+    meta.salesChunkCount = 0;
+    meta.collectionCounts = {
+      products: (data.products || []).length,
+      stores: (data.stores || []).length,
+      deliveries: (data.deliveries || []).length,
+      sales: (data.sales || []).length,
+      orders: (data.orders || []).length
+    };
+    meta.adminSummary = buildSplitCloudSummary(data);
+    return sanitizeFirestoreValue(meta);
+  }
+
+  function metaPayloadFromSplitMeta(meta={}){
+    const excluded = new Set(['payload','storage','storageMode','chunkCount','salesStorage','salesChunkCount','collectionCounts','adminSummary']);
+    const data = {};
+    Object.entries(meta || {}).forEach(([key, value]) => {
+      if (!excluded.has(key)) data[key] = value;
+    });
+    data.products = [];
+    data.stores = [];
+    data.deliveries = [];
+    data.sales = [];
+    data.orders = [];
+    [...CLOUD_AUX_COLLECTIONS].forEach(name => { data[name] = Array.isArray(data[name]) ? data[name] : []; });
+    data._cloudSummary = meta.adminSummary || null;
+    data._cloudCounts = meta.collectionCounts || null;
+    return data;
+  }
+
+  function mergeStoreScopedData(base, scoped, storeId){
+    const data = migrate(base || {});
+    if (Array.isArray(scoped.products) && scoped.products.length) data.products = scoped.products;
+    if (Array.isArray(scoped.stores) && scoped.stores.length) {
+      const byId = new Map((data.stores || []).map(st => [st.id, st]));
+      scoped.stores.forEach(st => byId.set(st.id, {...(byId.get(st.id) || {}), ...st}));
+      data.stores = Array.from(byId.values());
+    }
+    ['deliveries','sales','orders','priceChecks','inventoryOut','tickets','corrections'].forEach(name => {
+      const incoming = Array.isArray(scoped[name]) ? scoped[name] : [];
+      const current = Array.isArray(data[name]) ? data[name] : [];
+      data[name] = current.filter(row => String(row.storeId || '') !== String(storeId)).concat(incoming);
+    });
+    data._updatedAt = scoped._updatedAt || data._updatedAt;
+    data._cloudSummary = scoped._cloudSummary || data._cloudSummary || null;
+    data._cloudCounts = scoped._cloudCounts || data._cloudCounts || null;
+    return migrate(data);
+  }
+
   const Store = {
     cloudDoc(){
       return this.cloud.collection(CLOUD_COLLECTION).doc(CLOUD_DOC_ID);
     },
-    async loadCloudPayload(snapshot=null){
+    cloudCollection(name){
+      return this.cloudDoc().collection(name);
+    },
+    async readCloudCollection(name, options={}){
+      if (!this.usingCloud || !this.cloud) return [];
+      const storeId = options.storeId || '';
+      try {
+        if (name === 'stores' && storeId) {
+          const storeSnap = await this.cloudCollection(name).doc(firestoreSafeDocId(name, {id:storeId})).get();
+          return storeSnap.exists ? [{...(storeSnap.data() || {}), id:(storeSnap.data() || {}).id || storeId}] : [];
+        }
+        let ref = this.cloudCollection(name);
+        if (storeId && ['deliveries','sales','orders','priceChecks','inventoryOut','tickets','corrections'].includes(name)) {
+          ref = ref.where('storeId', '==', storeId);
+        }
+        const qs = await ref.get();
+        const rows = [];
+        qs.forEach(doc => {
+          const row = doc.data() || {};
+          if (row._deleted) return;
+          rows.push({...row, id:row.id || doc.id});
+        });
+        return rows;
+      } catch(e) {
+        console.warn(`Falha ao ler coleção ${name} do Firestore.`, e);
+        return [];
+      }
+    },
+    async loadSplitCloudPayload(snapshot=null, options={}){
       if (!this.usingCloud || !this.cloud) return null;
       const docRef = this.cloudDoc();
       const snap = snapshot || await docRef.get();
       if (!snap.exists) return null;
       const meta = snap.data() || {};
+      const base = migrate({...(this.data || this.seed()), ...metaPayloadFromSplitMeta(meta)});
+      const allowHeavy = options?.allowHeavy !== false;
+      const storeId = options?.storeId || '';
+      let collections = Array.isArray(options?.collections) ? options.collections : null;
+      if (!collections) {
+        if (storeId) collections = CLOUD_STORE_COLLECTIONS;
+        else collections = allowHeavy ? [...CLOUD_MAIN_COLLECTIONS, ...CLOUD_AUX_COLLECTIONS] : ['products','stores'];
+      }
+      for (const name of collections) {
+        base[name] = await this.readCloudCollection(name, {storeId});
+        if ((name === 'products' || name === 'stores') && (!Array.isArray(base[name]) || !base[name].length)) {
+          base[name] = name === 'products' ? (window.DEFAULT_PRODUCTS || []).map(p => ({...p})) : (window.DEFAULT_STORES || []).map(st => ({...st}));
+        }
+        await yieldToBrowser();
+      }
+      return {payload:migrate(base), updatedAt: meta.updatedAt || dataUpdatedAt(base), split:true, meta};
+    },
+    async syncCloudCollection(name, rows=[], updatedAt, options={}){
+      if (!this.usingCloud || !this.cloud) return;
+      const storeId = options.storeId || '';
+      const purge = options.purge !== false;
+      const sourceRows = Array.isArray(rows) ? rows : [];
+      const desiredIds = new Set(sourceRows.map((row, idx) => firestoreSafeDocId(name, row, idx)));
+      let batch = this.cloud.batch();
+      let opCount = 0;
+      const commitIfNeeded = async (force=false) => {
+        if (!opCount || (!force && opCount < CLOUD_COLLECTION_BATCH_LIMIT)) return;
+        await batch.commit();
+        batch = this.cloud.batch();
+        opCount = 0;
+        await yieldToBrowser();
+      };
+      for (let i=0; i<sourceRows.length; i++) {
+        const row = sourceRows[i] || {};
+        const id = firestoreSafeDocId(name, row, i);
+        const ref = this.cloudCollection(name).doc(id);
+        batch.set(ref, sanitizeFirestoreValue({...row, id:row.id || id, _cloudUpdatedAt:updatedAt}), {merge:false});
+        opCount += 1;
+        await commitIfNeeded();
+      }
+      await commitIfNeeded(true);
+
+      if (!purge) return;
+      try {
+        let ref = this.cloudCollection(name);
+        if (storeId && ['deliveries','sales','orders','priceChecks','inventoryOut','tickets','corrections'].includes(name)) {
+          ref = ref.where('storeId', '==', storeId);
+        }
+        const existing = await ref.get();
+        batch = this.cloud.batch();
+        opCount = 0;
+        const docsToCheck = [];
+        existing.forEach(doc => docsToCheck.push(doc));
+        for (const doc of docsToCheck) {
+          if (!desiredIds.has(doc.id)) {
+            batch.delete(doc.ref);
+            opCount += 1;
+            await commitIfNeeded();
+          }
+        }
+        await commitIfNeeded(true);
+      } catch(e) {
+        console.warn(`Falha ao limpar documentos removidos da coleção ${name}.`, e);
+      }
+    },
+    async saveSplitCloudPayload(updatedAt, options={}){
+      if (!this.usingCloud || !this.cloud) return;
+      this._savingCloud = true;
+      try {
+        const sourceData = this.data || {};
+        const session = (typeof state !== 'undefined' && state.session) ? state.session : null;
+        const isStoreSession = session?.role === 'store' && session?.storeId;
+        let collections = Array.isArray(options?.cloudCollections) && options.cloudCollections.length ? options.cloudCollections : null;
+
+        if (isStoreSession) {
+          const storeId = session.storeId;
+          collections = collections || ['orders','priceChecks','inventoryOut','tickets','corrections'];
+          collections = collections.filter(name => ['orders','priceChecks','inventoryOut','tickets','corrections'].includes(name));
+          for (const name of collections) {
+            const rows = (sourceData[name] || []).filter(row => String(row.storeId || '') === String(storeId));
+            await this.syncCloudCollection(name, rows, updatedAt, {storeId, purge:false});
+          }
+          await this.cloudDoc().set(sanitizeFirestoreValue({storage:CLOUD_SPLIT_STORAGE, storageMode:CLOUD_SPLIT_STORAGE, updatedAt, lastStoreUpdate:{storeId, updatedAt}}), {merge:true});
+          return;
+        }
+
+        collections = collections || [...CLOUD_MAIN_COLLECTIONS, ...CLOUD_AUX_COLLECTIONS];
+        await this.cloudDoc().set(buildSplitCloudMeta(sourceData, updatedAt), {merge:false});
+        for (const name of collections) {
+          await this.syncCloudCollection(name, sourceData[name] || [], updatedAt, {purge:true});
+        }
+      } finally {
+        setTimeout(() => { this._savingCloud = false; }, 800);
+      }
+    },
+    async loadStoreScopeFromCloud(storeId){
+      if (!this.usingCloud || !this.cloud || !storeId) return this.data;
+      try {
+        const snap = await this.cloudDoc().get();
+        if (!snap.exists || !isSplitFirestoreMeta(snap.data() || {})) return this.data;
+        $('#syncPill') && ($('#syncPill').textContent = 'Carregando dados da loja');
+        const scoped = await this.loadSplitCloudPayload(snap, {storeId, allowHeavy:true, collections:CLOUD_STORE_COLLECTIONS});
+        if (scoped?.payload) {
+          this.data = mergeStoreScopedData(this.data || this.seed(), scoped.payload, storeId);
+          invalidatePerfCaches();
+          $('#syncPill') && ($('#syncPill').textContent = 'Loja sincronizada');
+        }
+      } catch(e) {
+        console.warn('Falha ao carregar dados específicos da loja.', e);
+        $('#syncPill') && ($('#syncPill').textContent = 'Loja em modo local');
+      }
+      return this.data;
+    },
+    startAdminSummaryListener(){
+      if (!this.usingCloud || !this.cloud || this._adminSummaryUnsubscribe) return;
+      try {
+        this._adminSummaryUnsubscribe = this.cloudDoc().onSnapshot(snap => {
+          if (!snap.exists) return;
+          const meta = snap.data() || {};
+          if (!isSplitFirestoreMeta(meta)) return;
+          this.data ||= this.seed();
+          this.data._cloudSummary = meta.adminSummary || this.data._cloudSummary || null;
+          this.data._cloudCounts = meta.collectionCounts || this.data._cloudCounts || null;
+          this.data._updatedAt = meta.updatedAt || this.data._updatedAt;
+          $('#syncPill') && ($('#syncPill').textContent = 'Resumo Firestore ativo');
+        });
+      } catch(e) { console.warn('Listener de resumo do ADM não iniciado.', e); }
+    },
+    stopCloudListeners(){
+      try { this._cloudUnsubscribe?.(); } catch(_) {}
+      try { this._adminSummaryUnsubscribe?.(); } catch(_) {}
+      this._cloudUnsubscribe = null;
+      this._adminSummaryUnsubscribe = null;
+    },
+    async loadCloudPayload(snapshot=null, options={}){
+      if (!this.usingCloud || !this.cloud) return null;
+      const docRef = this.cloudDoc();
+      const snap = snapshot || await docRef.get();
+      if (!snap.exists) return null;
+      const meta = snap.data() || {};
+      if (isSplitFirestoreMeta(meta)) return this.loadSplitCloudPayload(snap, options || {});
       const allowHeavy = options?.allowHeavy !== false;
       if (!allowHeavy && ((meta.storage === 'chunked' && toNumber(meta.chunkCount) > 0) || (meta.salesStorage === 'chunked-arrays' && toNumber(meta.salesChunkCount) > 0))) {
         return {deferred:true, updatedAt: meta.updatedAt || '', meta};
@@ -1123,8 +1423,9 @@
       }
       return payload ? {payload, updatedAt: meta.updatedAt || dataUpdatedAt(payload)} : null;
     },
-    async saveCloudPayload(updatedAt){
+    async saveCloudPayload(updatedAt, options={}){
       if (!this.usingCloud || !this.cloud) return;
+      if (CLOUD_SPLIT_MODE) return this.saveSplitCloudPayload(updatedAt, options || {});
       this._savingCloud = true;
       try {
         const docRef = this.cloudDoc();
@@ -1198,6 +1499,7 @@
       this.usingCloud = false;
       this._savingCloud = false;
       this._pendingCloudUpdatedAt = '';
+      this._pendingCloudSaveOptions = null;
       this._cloudSaveTimer = null;
       this._localSaveTimer = null;
       this._queuedSaveOptions = null;
@@ -1306,6 +1608,10 @@
         this._largeCloudDeferred = false;
         this._dataDeferred = false;
         invalidatePerfCaches();
+        if (this.usingCloud && CLOUD_SPLIT_MODE && cloudData?.payload && !cloudData?.split) {
+          onProgress?.('Migrando estrutura antiga para coleções separadas em segundo plano...');
+          this.scheduleCloudSave(new Date().toISOString(), 800, {cloudCollections:[...CLOUD_MAIN_COLLECTIONS, ...CLOUD_AUX_COLLECTIONS]});
+        }
         onProgress?.('Base completa carregada.');
         return this.data;
       } finally {
@@ -1356,9 +1662,10 @@
         }
       };
     },
-    scheduleCloudSave(updatedAt, delay=1400){
+    scheduleCloudSave(updatedAt, delay=1400, options={}){
       if (!this.usingCloud || !this.cloud) return;
       this._pendingCloudUpdatedAt = updatedAt || this._pendingCloudUpdatedAt || new Date().toISOString();
+      this._pendingCloudSaveOptions = {...(this._pendingCloudSaveOptions || {}), ...(options || {})};
       if (this._cloudSaveTimer) clearTimeout(this._cloudSaveTimer);
       $('#syncPill') && ($('#syncPill').textContent = 'Firestore aguardando sincronização');
       this._cloudSaveTimer = setTimeout(() => this.flushCloudSave(), delay);
@@ -1366,22 +1673,24 @@
     async flushCloudSave(){
       if (!this.usingCloud || !this.cloud) return;
       if (this._savingCloud) {
-        this.scheduleCloudSave(this._pendingCloudUpdatedAt || new Date().toISOString(), 1600);
+        this.scheduleCloudSave(this._pendingCloudUpdatedAt || new Date().toISOString(), 1600, this._pendingCloudSaveOptions || {});
         return;
       }
       const updatedAt = this._pendingCloudUpdatedAt || new Date().toISOString();
+      const saveOptions = this._pendingCloudSaveOptions || {};
       this._pendingCloudUpdatedAt = '';
+      this._pendingCloudSaveOptions = null;
       this._cloudSaveTimer = null;
       try {
         $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizando em segundo plano');
-        await this.saveCloudPayload(updatedAt);
+        await this.saveCloudPayload(updatedAt, saveOptions);
         $('#syncPill') && ($('#syncPill').textContent = 'Firestore sincronizado');
       } catch(e) {
         this.lastSaveWarning = 'Dados salvos apenas neste navegador. Firebase não salvou.';
         $('#syncPill') && ($('#syncPill').textContent = 'Firebase não salvou');
         console.warn('Falha ao sincronizar Firestore', e);
       } finally {
-        if (this._pendingCloudUpdatedAt) this.scheduleCloudSave(this._pendingCloudUpdatedAt, 1600);
+        if (this._pendingCloudUpdatedAt) this.scheduleCloudSave(this._pendingCloudUpdatedAt, 1600, this._pendingCloudSaveOptions || {});
       }
     },
     queueSave(options={}, delay=850){
@@ -1402,8 +1711,11 @@
         }, delay);
       });
     },
-    async save({skipCloud=false, onProgress=null, skipSalesChunks=false}={}){
-      if (this._dataDeferred || this._largeLocalDeferred || this._largeCloudDeferred) {
+    async save({skipCloud=false, onProgress=null, skipSalesChunks=false, cloudCollections=null}={}){
+      const activeSession = (typeof state !== 'undefined' && state.session) ? state.session : null;
+      const storeScopedCollections = ['orders','priceChecks','inventoryOut','tickets','corrections'];
+      const isSafeStoreScopedSave = activeSession?.role === 'store' && Array.isArray(cloudCollections) && cloudCollections.length && cloudCollections.every(name => storeScopedCollections.includes(name));
+      if ((this._dataDeferred || this._largeLocalDeferred || this._largeCloudDeferred) && !isSafeStoreScopedSave) {
         this.lastSaveWarning = 'Base completa ainda não foi carregada. Clique em Carregar base completa antes de salvar/importar para evitar sobrescrever dados antigos.';
         console.warn(this.lastSaveWarning);
         return;
@@ -1450,7 +1762,7 @@
         // Evita travamento: o Firebase passa a sincronizar em fila/debounce.
         // O navegador grava localmente primeiro e manda a nuvem só depois de uma pausa curta,
         // sem disparar vários JSON.stringify grandes em sequência.
-        this.scheduleCloudSave(updatedAt, shouldAvoidLocalStringify ? 1800 : 1200);
+        this.scheduleCloudSave(updatedAt, shouldAvoidLocalStringify ? 1800 : 1200, {cloudCollections});
       }
     },
     async reset(){
@@ -3068,7 +3380,7 @@
     $$('.segmented button').forEach(b=>b.addEventListener('click',()=>{state.orderType=b.dataset.type; render();}));
     $('#orderDateInput').addEventListener('change', e=>{
       Store.data.conciliation[type].orderDate = e.target.value || todayISO();
-      Store.save().then(render);
+      Store.queueSave({cloudCollections:['orders']}, 2000).then(render);
     });
     $$('#viewRoot [data-field]').forEach(inp=>{
       inp.addEventListener('input', e=>{
@@ -3079,19 +3391,19 @@
         if (field === 'quebraQty' && quebraLocked) return;
         line[field] = field === 'justification' ? e.target.value : toNumber(e.target.value);
         line.updatedAt = new Date().toISOString();
-        Store.save();
+        Store.queueSave({cloudCollections:['orders']}, 2000);
         renderOrderTotalsSoft(order);
       });
-      inp.addEventListener('change', ()=>Store.save().then(render));
+      inp.addEventListener('change', ()=>Store.queueSave({cloudCollections:['orders']}, 2000).then(render));
     });
-    $('#orderNotes').addEventListener('input', e=>{ order.notes=e.target.value; Store.save(); });
-    $('#saveDraft').addEventListener('click', ()=> Store.save().then(()=>toast('Rascunho salvo.')));
+    $('#orderNotes').addEventListener('input', e=>{ order.notes=e.target.value; Store.queueSave({cloudCollections:['orders']}, 2000); });
+    $('#saveDraft').addEventListener('click', ()=> Store.save({cloudCollections:['orders']}).then(()=>toast('Rascunho salvo.')));
     $('#sendOrder').addEventListener('click', async ()=>{
       const missing = rows.filter(r=>r.justReq && !String(r.line.justification||'').trim());
       if (missing.length) return toast('Existem itens com justificativa obrigatória antes do envio.', 'error');
       order.status = 'ENVIADO';
       order.submittedAt = new Date().toISOString();
-      await Store.save();
+      await Store.save({cloudCollections:['orders']});
       toast('Pedido enviado para análise comercial.');
       render();
     });
@@ -3244,7 +3556,7 @@
         rec.updatedBy = state.session?.usuario || 'promotor';
         rec.updatedAt = new Date().toISOString();
       });
-      await Store.save();
+      await Store.save({cloudCollections:['priceChecks']});
       toast('Preços em loja salvos.');
       renderStorePriceCheckPage();
     });
@@ -3437,11 +3749,11 @@
         row.order.breakReferenceLabel = row.cycle.label;
         row.order.breakFilledAtDate = ref.fillDate;
         row.order.breakCycleMode = row.cycle.mode;
-        Store.save();
+        Store.queueSave({cloudCollections:['orders']}, 2000);
       });
-      inp.addEventListener('change', ()=>Store.save().then(renderStoreBreaks));
+      inp.addEventListener('change', ()=>Store.queueSave({cloudCollections:['orders']}, 2000).then(renderStoreBreaks));
     });
-    $('#saveBreaks')?.addEventListener('click', ()=>Store.save().then(()=>toast('Quebras salvas.')));
+    $('#saveBreaks')?.addEventListener('click', ()=>Store.save({cloudCollections:['orders']}).then(()=>toast('Quebras salvas.')));
   }
 
   function renderOrderRow(order, r, editLocked){
@@ -4080,7 +4392,7 @@
         rec.updatedAt = new Date().toISOString();
       });
     });
-    $('#saveInventoryOut')?.addEventListener('click', async () => { await Store.save(); toast('Inventário de saída salvo.'); renderStoreInventoryOut(); });
+    $('#saveInventoryOut')?.addEventListener('click', async () => { await Store.save({cloudCollections:['inventoryOut']}); toast('Inventário de saída salvo.'); renderStoreInventoryOut(); });
   }
 
   function renderInventoryOutLimitRows(){
@@ -9640,7 +9952,8 @@
         const exists = (Store.data.users || []).some(u => normalizeLogin(u.usuario) === normalizeLogin(found.usuario));
         if (!exists) Store.data.users.push(found);
         const skipCloudDuringStartup = !!(Store._initializing && Store.usingCloud && !Store._cloudReadComplete);
-        if (!isFullDataDeferred()) {
+        // Login de loja não grava a base inteira: evita travar e evita sobrescrever dados de outras lojas.
+        if (!isFullDataDeferred() && found.role !== 'store') {
           Store.save({skipCloud: skipCloudDuringStartup}).catch(err => console.warn('Falha ao salvar recuperação de usuário.', err));
         }
       } catch(saveLoginUserError) {
@@ -9649,9 +9962,16 @@
 
       state.session = normalizeSystemUser({ ...found });
       state.page = isBackofficeUser(state.session) ? firstAccessibleAdminPage(state.session) : 'inicio-loja';
+      if (state.session.role === 'store') {
+        // Loja não usa onSnapshot em tempo real: carrega uma vez apenas os documentos da própria loja.
+        await Store.loadStoreScopeFromCloud(state.session.storeId);
+      } else {
+        // Backoffice escuta somente o documento resumo, sem baixar detalhes de produtos/vendas/entregas.
+        Store.startAdminSummaryListener();
+      }
       render();
     });
-    $('#logoutBtn').addEventListener('click',()=>{state.session=null; state.mobileMode=false; document.body.classList.remove('store-user','admin-user','store-mobile','sidebar-open'); renderLogin();});
+    $('#logoutBtn').addEventListener('click',()=>{Store.stopCloudListeners?.(); state.session=null; state.mobileMode=false; document.body.classList.remove('store-user','admin-user','store-mobile','sidebar-open'); renderLogin();});
     $('#sidebarToggle').addEventListener('click',(e)=>{ e.stopPropagation(); document.body.classList.toggle('sidebar-open'); });
     $('.sidebar')?.addEventListener('click', e=>e.stopPropagation());
     document.addEventListener('click', e=>{
@@ -10939,8 +11259,10 @@
     }
 
     Store.init()
-      .then(() => {
+      .then(async () => {
         $('#syncPill') && ($('#syncPill').textContent = Store.usingCloud ? 'Firestore ativo' : 'Modo local');
+        if (state.session?.role === 'store') await Store.loadStoreScopeFromCloud(state.session.storeId);
+        else if (state.session && isBackofficeUser(state.session)) Store.startAdminSummaryListener();
         if (state.session) render();
       })
       .catch(async e => {

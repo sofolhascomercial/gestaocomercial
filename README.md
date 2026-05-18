@@ -1,3 +1,18 @@
+# Sistema Comercial Só Folhas — v82
+
+## v82 - Firestore em coleções e lojas mais leves
+
+- Firestore passa a gravar dados principais em coleções separadas: `products`, `stores`, `deliveries`, `sales` e `orders`.
+- Dados auxiliares operacionais também ficam em coleções menores quando necessário, evitando payload único gigante.
+- Usuário de loja não mantém `onSnapshot` em tempo real; carrega uma vez somente os dados da própria loja.
+- ADM/comercial mantém apenas escuta leve do documento-resumo, sem assinar detalhes de venda/entrega/produto.
+- Pedido e quebra da loja deixam de salvar a cada tecla; agora usam debounce de 2 segundos.
+- Botões Confirmar/Enviar/Salvar continuam salvando imediatamente.
+- Compatível com a estrutura antiga: ao carregar a base completa no ADM, o sistema migra o payload antigo para coleções em segundo plano.
+- Mantém HTML/CSS/JavaScript puro, GitHub Pages e Firebase Firestore.
+
+Após publicar no GitHub Pages, use Ctrl+F5. Para migrar dados antigos já salvos em payload único, entre como ADM, use **Carregar base completa** quando solicitado e aguarde a sincronização do Firestore.
+
 # Sistema Comercial Só Folhas — v80
 
 ## v80 - Controle de Bases leve
