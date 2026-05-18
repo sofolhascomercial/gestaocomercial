@@ -6944,6 +6944,7 @@
     recs.products[aliasKey] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[aliasKey]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
     const affected = applyManualNameReconciliations();
     const removed = clearProductIssuesByRaw(rawName);
+    recalcSalesImportPendingCounters();
     Store.save().then(() => {
       closeModal();
       toast(`Produto conciliado a ${product.nomeSistema}. ${fmt.format(affected)} registro(s) atualizado(s) e ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
@@ -8328,12 +8329,103 @@
       let next = {...r};
       const store = resolveManualStoreAlias(next.storeRaw || next.storeName, next.rede, Store.data.stores || []);
       const product = resolveManualProductAlias(next.productRaw || next.productName, Store.data.products || []);
-      if (store && next.storeId !== store.id) { next.storeId = store.id; next.storeName = store.nome; changed++; }
+      if (store && next.storeId !== store.id) { next.storeId = store.id; next.storeName = store.nome; if (store.rede) next.rede = store.rede; changed++; }
       if (product && next.productId !== product.id) { next.productId = product.id; next.productName = product.nomeSistema; changed++; }
       return next;
     });
     reconcileSalesReferences(Store.data);
+    if (changed) recalcSalesImportPendingCounters();
     return changed;
+  }
+
+  function recalcSalesImportPendingCounters(importId=''){
+    Store.data ||= Store.seed();
+    Store.data.salesImports ||= [];
+    const targetImportId = String(importId || '');
+    const importsById = new Map((Store.data.salesImports || []).map(i => [String(i.id || ''), i]));
+    if (!importsById.size) return 0;
+    const summaryByImport = new Map();
+    const ensure = (id) => {
+      if (!id || (targetImportId && id !== targetImportId)) return null;
+      if (!importsById.has(id)) return null;
+      if (!summaryByImport.has(id)) {
+        summaryByImport.set(id, {
+          records:0, sourceRecords:0, qtyTotal:0, matchedProducts:0, unmatchedProducts:0,
+          matchedStores:0, unmatchedStores:0, dates:new Set(), sheets:new Map(), dateFrom:'', dateTo:''
+        });
+      }
+      return summaryByImport.get(id);
+    };
+    for (const r of (Store.data.sales || [])) {
+      const id = String(r.importId || r.fileId || '');
+      const item = ensure(id);
+      if (!item) continue;
+      const sourceRecords = toNumber(r.sourceRecords || 1) || 1;
+      item.records += 1;
+      item.sourceRecords += sourceRecords;
+      item.qtyTotal += toNumber(r.qty || 0);
+      if (r.productId) item.matchedProducts += 1; else item.unmatchedProducts += 1;
+      if (r.storeId) item.matchedStores += 1; else item.unmatchedStores += 1;
+      if (r.date) {
+        item.dates.add(r.date);
+        if (!item.dateFrom || String(r.date) < String(item.dateFrom)) item.dateFrom = r.date;
+        if (!item.dateTo || String(r.date) > String(item.dateTo)) item.dateTo = r.date;
+      }
+      const sheetKey = `${r.sheet || ''}|${r.rede || ''}`;
+      if (!item.sheets.has(sheetKey)) item.sheets.set(sheetKey, {sheetName:r.sheet || '', rede:r.rede || '', records:0, qtyTotal:0, unmatchedStores:0, unmatchedProducts:0});
+      const sheet = item.sheets.get(sheetKey);
+      sheet.records += 1;
+      sheet.qtyTotal += toNumber(r.qty || 0);
+      if (!r.storeId) sheet.unmatchedStores += 1;
+      if (!r.productId) sheet.unmatchedProducts += 1;
+    }
+    let changed = 0;
+    const ids = targetImportId ? [targetImportId] : Array.from(importsById.keys()).filter(Boolean);
+    ids.forEach(id => {
+      const imp = importsById.get(id);
+      if (!imp) return;
+      const s = summaryByImport.get(id);
+      const before = JSON.stringify({
+        records:imp.records, sourceRecords:imp.sourceRecords, qtyTotal:imp.qtyTotal, matchedProducts:imp.matchedProducts, unmatchedProducts:imp.unmatchedProducts, matchedStores:imp.matchedStores, unmatchedStores:imp.unmatchedStores, dateFrom:imp.dateFrom, dateTo:imp.dateTo, dates:imp.dates
+      });
+      if (s) {
+        imp.records = s.records;
+        imp.sourceRecords = s.sourceRecords;
+        imp.qtyTotal = s.qtyTotal;
+        imp.matchedProducts = s.matchedProducts;
+        imp.unmatchedProducts = s.unmatchedProducts;
+        imp.matchedStores = s.matchedStores;
+        imp.unmatchedStores = s.unmatchedStores;
+        imp.dates = Array.from(s.dates).sort();
+        imp.dateFrom = s.dateFrom || imp.dateFrom || '';
+        imp.dateTo = s.dateTo || imp.dateTo || '';
+        if (s.sheets.size) {
+          imp.sheets = Array.from(s.sheets.values()).sort((a,b)=>String(a.rede||'').localeCompare(String(b.rede||''),'pt-BR') || String(a.sheetName||'').localeCompare(String(b.sheetName||''),'pt-BR'));
+        }
+      } else {
+        imp.records = 0;
+        imp.sourceRecords = 0;
+        imp.qtyTotal = 0;
+        imp.matchedProducts = 0;
+        imp.unmatchedProducts = 0;
+        imp.matchedStores = 0;
+        imp.unmatchedStores = 0;
+        imp.dates = [];
+      }
+      const after = JSON.stringify({
+        records:imp.records, sourceRecords:imp.sourceRecords, qtyTotal:imp.qtyTotal, matchedProducts:imp.matchedProducts, unmatchedProducts:imp.unmatchedProducts, matchedStores:imp.matchedStores, unmatchedStores:imp.unmatchedStores, dateFrom:imp.dateFrom, dateTo:imp.dateTo, dates:imp.dates
+      });
+      if (before !== after) changed++;
+    });
+    return changed;
+  }
+
+  function refreshSalesImportAfterReconciliation(importId=''){
+    const autoFixed = applyKnownStoreOverridesToSales();
+    const manualFixed = applyManualNameReconciliations();
+    const importsFixed = recalcSalesImportPendingCounters(importId || '');
+    state.reconciliationCache = null;
+    return autoFixed + manualFixed + importsFixed;
   }
 
   function sameReconciliationRede(rowRede='', redeHint=''){
@@ -8445,6 +8537,7 @@
     recs.products[key] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
     const affected = applySingleProductNameReconciliation(rawName, product);
     const removed = clearProductIssuesByRaw(rawName);
+    recalcSalesImportPendingCounters();
     state.reconciliationCache = null;
     await Store.save();
     toast(`Produto conciliado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
@@ -8473,6 +8566,7 @@
     toast(`Aplicando conciliação de loja: ${rawName} → ${normalizedStore.nome}...`);
     const affected = await applySingleStoreNameReconciliationAsync(rawName, normalizedStore, effectiveRede);
     const removed = clearStoreIssuesByRaw(rawName, effectiveRede);
+    recalcSalesImportPendingCounters();
     state.reconciliationCache = null;
     await Store.save();
     toast(`Loja conciliada: ${rawName} → ${normalizedStore.nome}. ${fmt.format(affected.records || affected.rows)} registro(s) atualizado(s), ${fmt.format(removed)} erro(s) igual(is) limpo(s).`);
@@ -10582,49 +10676,117 @@
   }
 
   function salesImportPendingGroups(importId){
+    refreshSalesImportAfterReconciliation(importId);
     const rows = (Store.data.sales || []).filter(r => (r.importId === importId || r.fileId === importId) && (!r.storeId || !r.productId));
     const map = new Map();
     rows.forEach(r => {
-      const type = !r.storeId ? 'Loja' : 'Produto';
-      const key = `${type}|${r.rede}|${r.storeRaw || r.storeName}|${r.productRaw || r.productName}`;
+      const isStorePending = !r.storeId;
+      const type = isStorePending ? 'Loja' : 'Produto';
+      // Loja pendente precisa agrupar somente por rede + nome da loja. Assim, ao vincular uma vez,
+      // todos os produtos/datas daquela mesma loja são corrigidos juntos.
+      // Produto pendente precisa agrupar pelo nome bruto do produto. Assim, ao vincular uma vez,
+      // todas as lojas/datas com o mesmo produto são corrigidas juntas.
+      const rawKey = isStorePending ? (r.storeRaw || r.storeName || '') : (r.productRaw || r.productName || '');
+      const key = isStorePending
+        ? `${type}|${r.rede || ''}|${normalize(rawKey)}`
+        : `${type}|${normalize(rawKey)}`;
       if (!map.has(key)) map.set(key, {
-        type, rede:r.rede || '—',
-        storeRaw:r.storeRaw || r.storeName || '—',
-        productRaw:r.productRaw || r.productName || '—',
-        records:0, qty:0, dates:new Set()
+        type,
+        rede: isStorePending ? (r.rede || '') : '',
+        storeRaw: isStorePending ? (r.storeRaw || r.storeName || '—') : 'Várias lojas',
+        productRaw: isStorePending ? 'Vários produtos' : (r.productRaw || r.productName || '—'),
+        products:new Set(), stores:new Set(), records:0, qty:0, dates:new Set()
       });
       const g = map.get(key);
       g.records += toNumber(r.sourceRecords || 1);
       g.qty += toNumber(r.qty);
       if (r.date) g.dates.add(r.date);
+      if (r.productRaw || r.productName) g.products.add(r.productRaw || r.productName);
+      if (r.storeRaw || r.storeName) g.stores.add(r.storeRaw || r.storeName);
     });
-    return Array.from(map.values()).sort((a,b)=> b.records - a.records);
+    return Array.from(map.values()).sort((a,b)=> (a.type === b.type ? 0 : a.type === 'Loja' ? -1 : 1) || b.records - a.records);
+  }
+
+  async function saveSalesPendencyStoreAlias(importId, rawName, redeHint, selectId){
+    const targetId = document.getElementById(selectId)?.value || '';
+    if (!targetId) return toast('Selecione a loja correta para vincular.', 'warn');
+    const ok = await saveStoreNameReconciliationByValues(rawName, targetId, redeHint || '', {closeModal:false, render:false});
+    if (!ok) return;
+    refreshSalesImportAfterReconciliation(importId || '');
+    await Store.save();
+    if (state.page === 'bases') renderImportSales();
+    showSalesImportPendencies(importId);
+  }
+
+  async function saveSalesPendencyProductAlias(importId, rawName, selectId){
+    const targetId = document.getElementById(selectId)?.value || '';
+    const product = productById(targetId);
+    if (!targetId || !product) return toast('Selecione o produto correto para vincular.', 'warn');
+    const key = productAliasKeyFromRaw(rawName);
+    const recs = nameReconciliationStore();
+    recs.products[key] = {rawName, targetId:product.id, targetName:product.nomeSistema, createdAt:recs.products[key]?.createdAt || new Date().toISOString(), updatedAt:new Date().toISOString(), user:state.session?.usuario || 'sistema'};
+    const affected = applySingleProductNameReconciliation(rawName, product);
+    clearProductIssuesByRaw(rawName);
+    refreshSalesImportAfterReconciliation(importId || '');
+    state.reconciliationCache = null;
+    await Store.save();
+    toast(`Produto vinculado: ${rawName} → ${product.nomeSistema}. ${fmt.format(affected.records || affected.rows)} registro(s) corrigido(s).`);
+    if (state.page === 'bases') renderImportSales();
+    showSalesImportPendencies(importId);
+  }
+
+  function salesPendencyActionHtml(g, importId, idx){
+    const selectId = reconciliationInlineId(`sales-pendency|${importId}|${idx}|${g.type}|${g.rede}|${g.storeRaw}|${g.productRaw}`);
+    if (g.type === 'Loja') {
+      const guess = guessStoreForReconciliation(g.storeRaw, g.rede || '');
+      return `<div class="sales-pendency-action">
+        <select id="${escapeHtml(selectId)}" class="inline-reconciliation-select">${storeSelectOptionsHtml(guess?.id || '')}</select>
+        <button class="btn btn-sm btn-primary" type="button" onclick="App.saveSalesPendencyStoreAlias(${jsArg(importId)}, ${jsArg(g.storeRaw)}, ${jsArg(g.rede || '')}, ${jsArg(selectId)})">Vincular loja</button>
+        <div class="muted small">${guess ? `Sugestão: ${escapeHtml(guess.rede)} • ${escapeHtml(guess.nome)}` : 'Ao salvar, corrige todas as datas/produtos desta loja.'}</div>
+      </div>`;
+    }
+    return `<div class="sales-pendency-action">
+      <select id="${escapeHtml(selectId)}" class="inline-reconciliation-select">${productSelectOptionsHtml('')}</select>
+      <button class="btn btn-sm btn-primary" type="button" onclick="App.saveSalesPendencyProductAlias(${jsArg(importId)}, ${jsArg(g.productRaw)}, ${jsArg(selectId)})">Vincular produto</button>
+      <div class="muted small">Ao salvar, corrige todas as lojas/datas com esse produto.</div>
+    </div>`;
   }
 
   function showSalesImportPendencies(importId){
     const imp = (Store.data.salesImports || []).find(i => i.id === importId);
     if (!imp) return toast('Base não encontrada.', 'error');
+    const fixed = refreshSalesImportAfterReconciliation(importId);
+    if (fixed) {
+      Store.queueSave({}, 900);
+      if (state.page === 'bases') setTimeout(() => { try { renderImportSales(); } catch(_) {} }, 0);
+    }
     const groups = salesImportPendingGroups(importId);
     const total = groups.length;
     const body = groups.length ? `
-      <p class="muted">Pendências consolidadas da base <strong>${escapeHtml(imp.fileName)}</strong>. Corrija o cadastro/aliases ou reimporte a base se necessário.</p>
+      <p class="muted">Pendências consolidadas da base <strong>${escapeHtml(imp.fileName)}</strong>. Vincule uma loja/produto uma única vez; o sistema corrige automaticamente todos os registros iguais já pendentes e salva o alias para próximas importações.</p>
       <div class="table-wrap" style="max-height:60vh;overflow:auto"><table>
-        <thead><tr><th>Tipo</th><th>Rede</th><th>Loja da planilha</th><th>Produto da planilha</th><th class="num">Linhas</th><th class="num">Qtd</th><th>Datas</th></tr></thead>
-        <tbody>${groups.slice(0,500).map(g => `<tr>
+        <thead><tr><th>Tipo</th><th>Rede</th><th>Loja da planilha</th><th>Produto da planilha</th><th class="num">Linhas</th><th class="num">Qtd</th><th>Datas</th><th>Ação</th></tr></thead>
+        <tbody>${groups.slice(0,500).map((g, idx) => `<tr>
           <td><span class="badge amber">${escapeHtml(g.type)}</span></td>
-          <td>${escapeHtml(g.rede)}</td>
-          <td>${escapeHtml(g.storeRaw)}</td>
-          <td>${escapeHtml(g.productRaw)}</td>
+          <td>${escapeHtml(g.rede || (g.type === 'Produto' ? 'Todas' : '—'))}</td>
+          <td>${escapeHtml(g.storeRaw)}${g.type === 'Produto' && g.stores?.size ? `<br><span class="muted small">${fmt.format(g.stores.size)} loja(s)</span>` : ''}</td>
+          <td>${escapeHtml(g.productRaw)}${g.type === 'Loja' && g.products?.size ? `<br><span class="muted small">${fmt.format(g.products.size)} produto(s)</span>` : ''}</td>
           <td class="num">${fmt.format(g.records)}</td>
           <td class="num">${fmt.format(g.qty)}</td>
           <td>${Array.from(g.dates).sort().slice(0,8).map(formatDate).join(', ')}${g.dates.size > 8 ? '...' : ''}</td>
+          <td>${salesPendencyActionHtml(g, importId, idx)}</td>
         </tr>`).join('')}</tbody>
       </table></div>
       ${total > 500 ? `<p class="muted small">Exibindo 500 de ${fmt.format(total)} grupos para manter a tela leve.</p>` : ''}
     ` : `
-      <div class="empty">Nenhuma pendência encontrada nesta base. Se o alerta ainda aparecer, a base será recalculada ao atualizar a página ou reimportar.</div>
+      <div class="empty">Nenhuma pendência encontrada nesta base. Os registros já foram reconhecidos ou corrigidos pelos aliases salvos.</div>
     `;
     openModal('Pendências da base de vendas', body);
+    if (!groups.length) {
+      recalcSalesImportPendingCounters(importId);
+      Store.queueSave({}, 900);
+      renderImportSales();
+    }
   }
 
   function renderSalesImportsTable(imports){
@@ -11235,7 +11397,7 @@
   }
 
   window.App = {
-    go, loadFullData, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, changeBaseControlMonth, selectBaseControlDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
+    go, loadFullData, closeModal, openCorrectionModal, openImportDuplicate, resolveImportDuplicate, resolveSelectedImportDuplicates, clearSelectedImportDuplicates, setAllImportDuplicateSelection, closePendency, resolveCorrection, togglePdfHistory, changePdfCalendarMonth, selectPdfCalendarDay, changeBaseControlMonth, selectBaseControlDay, showImportAlert, openImportIssueOptions, clearImportIssues, cleanResolvedImportIssues, clearSingleImportIssue, clearImportIssuesByFile, clearSimilarImportIssues, setAllImportIssueSelection, clearSelectedImportIssues, clearSelectedSimilarImportIssues, copySelectedImportIssueDetails, linkImportIssueCnpjToStore, linkImportIssueProductToProduct, openCriticalRuptureJustification, openUserPermissions, saveUserPermissions, deleteDeliveryImport, deleteDeliveryBatch, deleteSalesImport, showSalesImportPendencies, saveProductNameReconciliation, saveStoreNameReconciliation, saveStoreNameReconciliationFromModal, saveStoreNameReconciliationInline, saveSalesPendencyStoreAlias, saveSalesPendencyProductAlias, deleteNameReconciliation, fillProductReconciliation, fillStoreReconciliation, deleteOffer, deleteInventoryLimit, acceptTicket, openResolveTicket, resolveTicket,
     resetSystem: async () => { if(confirm('Apagar dados operacionais e restaurar base inicial?')) { await Store.reset(); toast('Sistema resetado.'); render(); } },
     exportBackup: () => {
       const blob = new Blob([JSON.stringify(Store.data,null,2)], {type:'application/json'});

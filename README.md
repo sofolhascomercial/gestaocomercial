@@ -1,3 +1,16 @@
+# Sistema Comercial Só Folhas — v83
+
+## v83 - Conciliação automática das pendências da base
+
+- Na janela **Pendências da base de vendas**, agora é possível vincular loja e produto diretamente na própria pendência.
+- Ao vincular uma loja uma única vez, todos os registros pendentes com o mesmo nome de loja na mesma rede são corrigidos automaticamente.
+- Ao vincular um produto uma única vez, todos os registros pendentes com o mesmo nome de produto são corrigidos automaticamente.
+- O vínculo fica salvo como alias para próximas importações.
+- O histórico da base recalcula as quantidades de pendências depois da correção, evitando manter alerta antigo quando tudo já foi reconhecido.
+- Mantém HTML/CSS/JavaScript puro, GitHub Pages e Firebase Firestore.
+
+Após publicar no GitHub Pages, use Ctrl+F5.
+
 # Sistema Comercial Só Folhas — v82
 
 ## v82 - Firestore em coleções e lojas mais leves
