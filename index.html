@@ -1,79 +1,713 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Só Folhas | Sistema Comercial</title>
-  <link rel="icon" href="logo-sofolhas-oficial.png" type="image/png" />
-  <link rel="stylesheet" href="style.css?v=83" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js" defer></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js" defer></script>
-  <script src="data/default-data.js?v=76" defer></script>
-  <script src="firebase-config.js?v=75" defer></script>
-  <script src="script.js?v=83" defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Rotinas Só Folhas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20260729-data-real-modo-leve-v12" />
 </head>
 <body>
-  <div id="toastHost" class="toast-host"></div>
-
-  <main id="loginView" class="login-view">
-    <section class="login-card">
-      <div class="brand-lockup large">
-        <img src="logo-sofolhas-oficial.png" onerror="this.onerror=null;this.src='assets/logo-sofolhas-oficial.png';" alt="Só Folhas" />
+  <div class="app-shell">
+    
+    <header class="topbar topbar-model">
+      <div class="topbar-title-wrap">
+        <h1 class="main-title model-title">PAINEL DE ROTINAS<br>OPERACIONAIS</h1>
       </div>
-      <h1>Sistema Comercial Integrado</h1>
-      <p class="muted">Pedidos comerciais, análise de quebras, rupturas, faltas, qualidade e venda x quebra em uma única operação.</p>
-      <form id="loginForm" class="login-form">
-        <label>Usuário
-          <input id="loginUser" autocomplete="username" placeholder="Digite seu usuário" required />
-        </label>
-        <label>Senha
-          <input id="loginPass" autocomplete="current-password" type="password" placeholder="Digite a senha" required />
-        </label>
-        <button type="submit" class="btn btn-primary">Entrar no sistema</button>
-      </form>
-      <div class="sync-pill" id="syncPill">Modo local</div>
-    </section>
-  </main>
 
-  <div id="appShell" class="app-shell hidden">
-    <aside class="sidebar">
-      <div class="brand-lockup">
-        <img src="logo-sofolhas-oficial.png" onerror="this.onerror=null;this.src='assets/logo-sofolhas-oficial.png';" alt="Só Folhas" />
+      <div class="topbar-logo-wrap">
+        <img src="./logo-sofolhas.png" alt="Só Folhas Hortifruti" class="brand-logo-model" />
       </div>
-      <nav id="navMenu" class="nav-menu"></nav>
-    </aside>
 
-    <section class="workspace">
-      <header class="topbar">
-        <div>
-          <button id="sidebarToggle" class="icon-btn" aria-label="Menu">☰</button>
+      <div class="topbar-actions topbar-actions-model">
+        <button id="sidebarToggle" class="btn btn-filters model-icon-btn" type="button" aria-label="Abrir filtros" onclick="window.PainelSF && window.PainelSF.alternarSidebar()">
+          <span class="btn-icon">☰</span>
+          <span>Filtros</span>
+        </button>
+        <button id="adminToggle" class="btn btn-admin model-lock-btn" type="button" aria-label="Abrir área administrativa" onclick="window.PainelSF && window.PainelSF.abrirAdminModal()">
+          <span class="lock-icon">🔒</span>
+        </button>
+        <button id="presentationToggle" class="btn btn-filters model-icon-btn model-presentation-btn" type="button" aria-label="Abrir modo apresentação" onclick="window.PainelSF && window.PainelSF.abrirApresentacao()">
+          <span class="btn-icon">📺</span>
+          <span>Apresentação</span>
+        </button>
+      </div>
+      <div class="header-glow"></div>
+    </header>
+
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    <div class="layout-shell">
+      <aside id="filtersSidebar" class="filters-sidebar">
+        <section class="panel panel-filters sidebar-panel">
+          <div class="section-head compact-head section-head-sidebar">
+            <div>
+              <span class="eyebrow">Filtros</span>
+              <h2>Refine a visualização</h2>
+            </div>
+            <button id="closeSidebar" class="icon-btn" type="button" aria-label="Fechar filtros" onclick="window.PainelSF && window.PainelSF.alternarSidebar(false)">×</button>
+          </div>
+
+          <div class="sidebar-helper-card">
+            <strong>Visão rápida</strong>
+            <span>Abra esta lateral para filtrar o período, a rotina, a rede, a loja, o formador e o status do painel.</span>
+          </div>
+
+          <div class="filters-grid sidebar-filters-grid">
+            <label class="field field-full">
+              <span>Período inicial</span>
+              <input id="filterDataInicial" type="date" />
+            </label>
+
+            <label class="field field-full">
+              <span>Período final</span>
+              <input id="filterDataFinal" type="date" />
+            </label>
+
+            <label class="field field-full">
+              <span>Rotina</span>
+              <select id="filterRotina"><option value="">Todas</option></select>
+            </label>
+
+            <label class="field field-full">
+              <span>Rede</span>
+              <select id="filterRede"><option value="">Todas</option></select>
+            </label>
+
+            <label class="field field-full">
+              <span>Loja</span>
+              <select id="filterLoja"><option value="">Todas</option></select>
+            </label>
+
+            <label class="field field-full">
+              <span>Formador</span>
+              <select id="filterFormador"><option value="">Todos</option></select>
+            </label>
+
+            <label class="field field-full">
+              <span>Status</span>
+              <select id="filterStatus">
+                <option value="">Todos</option>
+                <option value="realizada">Realizada</option>
+                <option value="pendente">Pendente</option>
+              </select>
+            </label>
+
+            <div class="actions-row sidebar-actions-row field-full">
+              <button id="applyFilters" class="btn btn-primary" type="button" onclick="window.PainelSF && window.PainelSF.aplicarFiltrosRapido()">Aplicar filtros</button>
+              <button id="clearFilters" class="btn btn-secondary" type="button" onclick="window.PainelSF && window.PainelSF.limparFiltrosRapido()">Limpar filtros</button>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <main class="dashboard">
+
+      
+      <section class="summary-tabs-shell">
+        <div class="summary-tabs">
+          <button class="summary-tab active" data-period="diario" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('diario')">
+            <span class="summary-tab-icon">🗓️</span>
+            <span class="summary-tab-copy">
+              <strong>Resumo Diário</strong>
+              <small id="tabLabelDiario">Hoje</small>
+            </span>
+          </button>
+          <button class="summary-tab" data-period="semanal" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('semanal')">
+            <span class="summary-tab-icon">🗓️</span>
+            <span class="summary-tab-copy">
+              <strong>Resumo Semanal</strong>
+              <small id="tabLabelSemanal">Últimos 7 dias</small>
+            </span>
+          </button>
+          <button class="summary-tab" data-period="mensal" type="button" onclick="window.PainelSF && window.PainelSF.aplicarPeriodoResumo('mensal')">
+            <span class="summary-tab-icon">🗓️</span>
+            <span class="summary-tab-copy">
+              <strong>Resumo Mensal</strong>
+              <small id="tabLabelMensal">Mês atual</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section class="regional-tabs-shell" aria-label="Seleção de regional">
+        <div class="regional-tabs" id="regionalDashboardTabs">
+          <button class="regional-tab active" data-regional="geral" type="button">
+            <span class="regional-tab-icon">◉</span>
+            <span><strong>Visão Geral</strong><small>Todas as 62 unidades</small></span>
+          </button>
+          <button class="regional-tab" data-regional="df_go" type="button">
+            <span class="regional-tab-icon">DF</span>
+            <span><strong>Regional DF/GO</strong><small id="regionalCountDfGo">0 unidades</small></span>
+          </button>
+          <button class="regional-tab" data-regional="goiania_fora" type="button">
+            <span class="regional-tab-icon">GO</span>
+            <span><strong>Regional Goiânia – Lojas Fora</strong><small id="regionalCountGoiania">0 unidades</small></span>
+          </button>
+        </div>
+        <div id="regionalDashboardNotice" class="regional-dashboard-notice hidden"></div>
+      </section>
+
+      <section class="kpi-grid hero-kpi-grid">
+        <div class="hero-left-stack">
+          <article class="panel kpi-card hero-side-card">
+            <div class="hero-card-head">
+              <span class="hero-card-icon">☑️</span>
+              <span class="eyebrow hero-eyebrow blue">Rotinas previstas</span>
+            </div>
+            <h3 id="kpiPrevistas">0</h3>
+            <p>Total de registros no recorte atual</p>
+          </article>
+
+          <article class="panel kpi-card hero-side-card">
+            <div class="hero-card-head">
+              <span class="hero-card-icon">✅</span>
+              <span class="eyebrow hero-eyebrow green">Realizadas no período</span>
+            </div>
+            <h3 id="kpiHoje">0</h3>
+            <p>Execuções concluídas no período filtrado</p>
+          </article>
+        </div>
+
+        <article class="panel kpi-card hero-center-card">
+          <div class="hero-center-title">Execução Geral</div>
+          <div class="execution-ring-wrap">
+            <div class="execution-ring" id="executionRing">
+              <div class="execution-ring-inner">
+                <div class="execution-value" id="kpiExecucao">0%</div>
+                <div class="execution-delta" id="execucaoDelta">--</div>
+                <div class="execution-subtext">em relação ao período anterior</div>
+              </div>
+            </div>
+          </div>
+          <div class="execution-meta-line"></div>
+          <div class="execution-goal">
+            <div class="execution-goal-label">🎯 Meta do período: <strong id="metaPeriodoLabel">80%</strong></div>
+            <div class="goal-progress-track">
+              <div class="goal-progress-fill" id="goalProgressFill"></div>
+              <div class="goal-progress-marker"></div>
+            </div>
+            <div class="goal-foot">
+              <span id="goalStatusText">Acompanhando resultado</span>
+              <span id="goalGapText">--</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel kpi-card hero-right-card">
+          <div class="hero-card-head">
+            <span class="hero-card-icon warn">⚠️</span>
+            <span class="eyebrow hero-eyebrow amber">Pendências</span>
+          </div>
+          <h3 id="kpiPendentes">0</h3>
+          <p>Total de rotinas não concluídas</p>
+          <div class="hero-alert-list" id="painelPendencias"></div>
+        </article>
+      </section>
+
+      <section class="panel execution-curve-panel" id="executionCurvePanel" aria-labelledby="executionCurveTitle">
+        <div class="execution-curve-head">
           <div>
-            <h2 id="pageTitle">Sistema de Pedidos Comerciais</h2>
-            <p id="pageSubtitle">Crie e acompanhe pedidos com base em vendas, entregas, inventário e quebras.</p>
+            <span class="eyebrow">Histórico comparativo</span>
+            <h2 id="executionCurveTitle">Curva de execução</h2>
+            <p id="executionCurveSubtitle" class="execution-curve-subtitle">Evolução percentual das rotinas realizadas.</p>
+          </div>
+          <div class="execution-curve-periods" id="executionCurvePeriods" aria-label="Período da curva de execução">
+            <button type="button" data-curve-period="7d">7 dias</button>
+            <button type="button" data-curve-period="15d">15 dias</button>
+            <button type="button" data-curve-period="30d" class="active">30 dias</button>
+            <button type="button" data-curve-period="60d">60 dias</button>
+            <button type="button" data-curve-period="3m">3 meses</button>
+            <button type="button" data-curve-period="6m">6 meses</button>
+            <button type="button" data-curve-period="1a">1 ano</button>
           </div>
         </div>
-        <div class="profile-card">
-          <button id="mobileModeBtn" class="btn btn-soft mobile-mode-btn hidden" type="button">📱 Abrir modo mobile</button>
-          <span id="contextBadge" class="context-badge">Loja</span>
-          <span class="avatar">●</span>
-          <strong id="profileName">Usuário</strong>
-          <button class="icon-btn" id="logoutBtn" title="Sair">⎋</button>
-        </div>
-      </header>
 
-      <section id="viewRoot" class="view-root"></section>
+        <div class="execution-curve-stats" id="executionCurveStats">
+          <article><span>Média do período</span><strong id="curveAverage">--</strong><small id="curveAverageDetail">Sem dados</small></article>
+          <article><span>Melhor resultado</span><strong id="curveBest">--</strong><small id="curveBestDetail">Sem dados</small></article>
+          <article><span>Menor resultado</span><strong id="curveWorst">--</strong><small id="curveWorstDetail">Sem dados</small></article>
+          <article><span>Variação</span><strong id="curveVariation">--</strong><small id="curveVariationDetail">Período anterior</small></article>
+        </div>
+
+        <div class="execution-curve-legend" aria-label="Legenda do gráfico">
+          <span><i class="legend-line current"></i> Período atual</span>
+          <span id="curvePreviousLegend"><i class="legend-line previous"></i> Período anterior</span>
+          <span class="curve-coverage" id="curveCoverage"></span>
+        </div>
+
+        <div class="execution-curve-chart-shell" id="executionCurveChartShell">
+          <div class="execution-curve-scroll" id="executionCurveScroll">
+            <div class="execution-curve-chart" id="executionCurveChart" role="img" aria-label="Gráfico comparativo da execução das rotinas"></div>
+          </div>
+          <div class="execution-curve-tooltip hidden" id="executionCurveTooltip"></div>
+        </div>
+        <div class="execution-curve-empty hidden" id="executionCurveEmpty">Importe resultados para visualizar a curva de execução.</div>
+      </section>
+
+      <section class="content-grid top-grid">
+        <article class="panel span-7">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Ranking</span>
+              <h2>Execução por formador</h2>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Posição</th>
+                  <th>Formador</th>
+                  <th>Realizadas</th>
+                  <th>Previstas</th>
+                  <th>Execução</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="rankingFormadoresTabela"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel span-5 featured-panel gold-panel">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Destaques</span>
+              <h2>Melhor loja de cada formador</h2>
+            </div>
+          </div>
+          <div id="melhoresLojasFormador" class="best-stores-grid"></div>
+        </article>
+      </section>
+
+      <section class="panel formador-rankings-panel">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Comparativo</span>
+            <h2>Ranking de lojas por formador</h2>
+          </div>
+        </div>
+        <div id="rankingsPorFormador" class="formador-columns"></div>
+      </section>
+
+      <section class="content-grid middle-grid">
+        <article class="panel span-6">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Lojas</span>
+              <h2>Ranking de lojas</h2>
+            </div>
+          </div>
+          <div id="rankingLojas" class="stack-list"></div>
+        </article>
+
+        <article class="panel span-6">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Atenção</span>
+              <h2>Rotinas menos realizadas</h2>
+            </div>
+          </div>
+          <div id="rotinasMenos" class="stack-list"></div>
+        </article>
+      </section>
+
+      <section class="content-grid bottom-grid">
+        <article class="panel span-7">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Catálogo</span>
+              <h2>Lista de rotinas cadastradas</h2>
+            </div>
+          </div>
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rotina</th>
+                  <th>Ocorrências</th>
+                  <th>Execução</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaRotinas"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel span-5 calendar-panel">
+          <div class="section-head">
+            <div>
+              <span class="eyebrow">Calendário</span>
+              <h2>Execução mensal</h2>
+            </div>
+          </div>
+          <div id="calendarioExecucao" class="calendar-wrap"></div>
+        </article>
+      </section>
+
+      <section class="panel insights-panel">
+        <div class="section-head">
+          <div>
+            <span class="eyebrow">Análises</span>
+            <h2>Rotinas por lojas</h2>
+          </div>
+        </div>
+
+        <div class="insight-panel active" data-insight-panel="lojas">
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>Loja</th>
+                  <th>Rede</th>
+                  <th>Formador</th>
+                  <th>Previstas</th>
+                  <th>Realizadas</th>
+                  <th>Execução</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaResumoLojas"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      </main>
+    </div>
+  </div>
+
+  <div id="adminModal" class="admin-experience hidden" aria-hidden="true">
+    <div id="adminOverlay" class="hidden"></div>
+
+    <section id="adminLoginView" class="admin-login-face">
+      <div class="admin-login-brand">
+        <img src="./logo-sofolhas.png" alt="Só Folhas Hortifruti" />
+        <div>
+          <span class="eyebrow">Painel de Rotinas</span>
+          <strong>Administração</strong>
+        </div>
+      </div>
+      <div class="admin-login-layout">
+        <div class="admin-login-copy">
+          <span class="admin-login-kicker">Gestão operacional integrada</span>
+          <h2>Controle as regionais, unidades, rotinas e importações em um ambiente exclusivo.</h2>
+          <p>As configurações administrativas ficam separadas do dashboard operacional para manter a navegação mais clara, segura e profissional.</p>
+          <div class="admin-login-feature-grid">
+            <div><strong>62</strong><span>unidades ativas</span></div>
+            <div><strong>18</strong><span>rotinas cadastradas</span></div>
+            <div><strong>2</strong><span>regionais operacionais</span></div>
+          </div>
+        </div>
+        <div class="admin-login-card">
+          <button id="closeAdmin" class="admin-back-link" type="button">← Voltar ao dashboard</button>
+          <div class="admin-login-card-head">
+            <span class="eyebrow">Acesso restrito</span>
+            <h3>Entrar no painel administrativo</h3>
+            <p>Use suas credenciais para continuar.</p>
+          </div>
+          <form id="adminLoginForm" class="admin-login-form">
+            <label class="field field-full">
+              <span>Usuário</span>
+              <input id="adminUser" type="text" autocomplete="username" placeholder="Digite o usuário" />
+            </label>
+            <label class="field field-full">
+              <span>Senha</span>
+              <input id="adminPass" type="password" autocomplete="current-password" placeholder="Digite a senha" />
+            </label>
+            <button class="btn btn-primary admin-login-submit" type="submit">Entrar no painel administrativo</button>
+            <div id="adminLoginFeedback" class="admin-feedback"></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="adminPanelView" class="admin-panel-face hidden">
+      <div class="admin-app-layout">
+        <aside class="admin-sidebar">
+          <div class="admin-sidebar-brand">
+            <img src="./logo-sofolhas.png" alt="Só Folhas Hortifruti" />
+            <div>
+              <strong>Painel Administrativo</strong>
+              <span>Gestão de rotinas</span>
+            </div>
+          </div>
+
+          <nav class="admin-nav" aria-label="Menu administrativo">
+            <button class="admin-tab active" data-tab="visao-geral" type="button"><span>▦</span><div><strong>Visão geral</strong><small>Resumo e alertas</small></div></button>
+            <button class="admin-tab" data-tab="importacao" type="button"><span>⇧</span><div><strong>Importações</strong><small>Enviar planilhas</small></div></button>
+            <button class="admin-tab" data-tab="regionais" type="button"><span>◎</span><div><strong>Regionais</strong><small>Separação das unidades</small></div></button>
+            <button class="admin-tab" data-tab="unidades" type="button"><span>▤</span><div><strong>Unidades</strong><small>Cadastro operacional</small></div></button>
+            <button class="admin-tab" data-tab="rotinas" type="button"><span>✓</span><div><strong>Rotinas</strong><small>Horários e tolerâncias</small></div></button>
+            <button class="admin-tab" data-tab="vinculos" type="button"><span>♙</span><div><strong>Equipe</strong><small>Formadores por loja</small></div></button>
+            <button class="admin-tab" data-tab="nomes" type="button"><span>✎</span><div><strong>Nomes</strong><small>Padronização das lojas</small></div></button>
+            <button class="admin-tab" data-tab="historico" type="button"><span>◷</span><div><strong>Histórico</strong><small>Importações processadas</small></div></button>
+            <button class="admin-tab" data-tab="configuracoes" type="button"><span>⚙</span><div><strong>Configurações</strong><small>Sistema e armazenamento</small></div></button>
+          </nav>
+
+          <div class="admin-sidebar-footer">
+            <div class="admin-session-card">
+              <span class="admin-session-avatar">RM</span>
+              <div><strong>richard.martins</strong><small>Administrador</small></div>
+            </div>
+            <button id="adminLogout" class="admin-logout-btn" type="button">Sair do ADM</button>
+          </div>
+        </aside>
+
+        <main class="admin-main">
+          <header class="admin-main-topbar">
+            <div>
+              <span class="eyebrow">Administração</span>
+              <h2 id="adminPageTitle">Visão geral</h2>
+              <p id="adminSummary" class="admin-summary"></p>
+            </div>
+            <div class="admin-main-actions">
+              <span id="adminSyncStatus" class="admin-sync-pill">● Conectando</span>
+              <button id="adminBackDashboard" class="btn btn-secondary" type="button">Voltar ao dashboard</button>
+            </div>
+          </header>
+
+          <div class="admin-panels">
+            <section class="admin-tab-panel active" data-panel="visao-geral">
+              <div class="admin-overview-grid">
+                <article class="admin-overview-card"><span>Unidades ativas</span><strong id="adminKpiUnidades">62</strong><small>Cadastro oficial</small></article>
+                <article class="admin-overview-card"><span>Sem regional</span><strong id="adminKpiSemRegional">0</strong><small>Precisam de classificação</small></article>
+                <article class="admin-overview-card"><span>Rotinas</span><strong id="adminKpiRotinas">18</strong><small>Regras ativas</small></article>
+                <article class="admin-overview-card"><span>Lojas 12x36</span><strong id="adminKpi12x36">7</strong><small>Funcionamento diário</small></article>
+              </div>
+              <div class="admin-dashboard-grid">
+                <article class="admin-block admin-status-panel">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Status operacional</span><h3>Saúde do sistema</h3></div></div>
+                  <div class="admin-health-list">
+                    <div><span>Última importação</span><strong id="adminKpiUltimaImportacao">Nenhuma</strong></div>
+                    <div><span>Conexão</span><strong id="adminKpiFirebase">Verificando</strong></div>
+                    <div><span>Dias no histórico</span><strong id="adminKpiDiasHistorico">0</strong></div>
+                    <div><span>Detalhes carregados</span><strong id="adminKpiDetalhes">0</strong></div>
+                  </div>
+                </article>
+                <article class="admin-block admin-alert-panel">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Atenção</span><h3>Alertas administrativos</h3></div></div>
+                  <div id="adminAlerts" class="admin-alert-list"></div>
+                </article>
+              </div>
+              <article class="admin-block admin-regional-overview">
+                <div class="section-head compact-head"><div><span class="eyebrow">Estrutura</span><h3>Distribuição das unidades por regional</h3></div></div>
+                <div id="adminRegionalOverviewCards" class="admin-regional-card-grid"></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="importacao">
+              <div class="admin-block import-hero-block">
+                <div class="import-hero-header"><div><span class="eyebrow">Importação</span><h3>Atualizar base do painel</h3><p class="admin-summary">Envie o relatório “RelChecklist” do Moki. O sistema identifica as rotinas realizadas, gera as pendências e classifica os horários automaticamente. O modelo anterior também continua aceito.</p></div></div>
+                <label class="upload-box upload-box-large" for="fileInput">
+                  <input id="fileInput" type="file" accept=".xlsx,.xlsm,.csv" multiple />
+                  <span class="upload-title">Selecionar planilha</span>
+                  <span class="upload-subtitle">Formatos aceitos: XLSX, XLSM e CSV • você pode selecionar vários arquivos</span>
+                </label>
+                <div class="import-status-shell"><div class="status-tag status-tag-soft">Importação de planilhas</div><div id="importSummary" class="import-summary import-summary-strong">Painel sem dados. Importe uma ou mais planilhas para carregar as rotinas.</div></div>
+                <div class="import-actions"><button id="importFile" class="btn btn-primary" type="button">Importar agora</button></div>
+                <div class="import-preview-shell">
+                  <div class="section-head compact-head"><div><span class="eyebrow">Pré-visualização</span><h3>Planilhas selecionadas</h3></div></div>
+                  <div id="selectedFilesSummary" class="admin-summary">Nenhuma planilha selecionada.</div>
+                  <div id="importPreviewList" class="preview-list"><div class="empty-state">Selecione uma ou mais planilhas para visualizar a prévia antes de importar.</div></div>
+                </div>
+                <div class="admin-highlight-grid">
+                  <div class="admin-highlight-card"><strong>Reconhecimento automático</strong><span>O sistema lê checklist, loja, data e hora da realização.</span></div>
+                  <div class="admin-highlight-card"><strong>Pendências automáticas</strong><span>O que não aparecer no relatório é registrado como pendente.</span></div>
+                  <div class="admin-highlight-card"><strong>Base mais leve</strong><span>Os dados brutos expiram em 5 dias, mas os resultados permanecem.</span></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="regionais">
+              <article class="admin-block">
+                <div class="admin-section-toolbar">
+                  <div><span class="eyebrow">Configuração de regionais</span><h3>Classificar unidades</h3><p class="admin-summary">A regional é vinculada ao código da unidade. Alterações aqui atualizam os dashboards e filtros automaticamente.</p></div>
+                  <button id="saveRegionals" class="btn btn-primary" type="button">Salvar regionais</button>
+                </div>
+                <div class="admin-table-filters">
+                  <label class="field"><span>Pesquisar unidade</span><input id="adminRegionalSearch" type="search" placeholder="Código ou nome da unidade" /></label>
+                  <label class="field"><span>Filtrar regional</span><select id="adminRegionalFilter"><option value="">Todas</option><option value="df_go">Regional DF/GO</option><option value="goiania_fora">Regional Goiânia – Lojas Fora</option><option value="sem_regional">Sem regional</option></select></label>
+                </div>
+                <div id="regionalConfigFeedback" class="admin-feedback"></div>
+                <div class="table-shell admin-table-shell"><table><thead><tr><th>Código</th><th>Unidade</th><th>Regional</th><th>12x36</th><th>Formador</th></tr></thead><tbody id="regionalUnitsTable"></tbody></table></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="unidades">
+              <article class="admin-block">
+                <div class="section-head compact-head"><div><span class="eyebrow">Cadastro oficial</span><h3>Unidades ativas</h3><p class="admin-summary">Lista controlada das lojas consideradas na geração de rotinas previstas e pendentes.</p></div></div>
+                <div class="table-shell admin-table-shell"><table><thead><tr><th>Código</th><th>Unidade</th><th>Rede</th><th>Regional</th><th>Formador</th><th>12x36</th><th>Situação</th></tr></thead><tbody id="adminUnitsTable"></tbody></table></div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="rotinas">
+              <article class="admin-block routine-manager-block">
+                <div class="admin-section-toolbar">
+                  <div>
+                    <span class="eyebrow">Cadastro dinâmico</span>
+                    <h3>Gerenciar rotinas</h3>
+                    <p class="admin-summary">Crie, renomeie, duplique, programe a vigência e desative rotinas sem alterar o histórico anterior.</p>
+                  </div>
+                  <button id="createRoutineButton" class="btn btn-primary" type="button">+ Nova rotina</button>
+                </div>
+                <div class="admin-table-filters routine-table-filters">
+                  <label class="field"><span>Pesquisar rotina</span><input id="adminRoutineSearch" type="search" placeholder="Nome, checklist Moki ou código" /></label>
+                  <label class="field"><span>Situação</span><select id="adminRoutineStatusFilter"><option value="">Todas</option><option value="ativa">Ativas</option><option value="agendada">Agendadas</option><option value="inativa">Inativas</option></select></label>
+                </div>
+                <div id="routineManagerFeedback" class="admin-feedback"></div>
+                <div class="table-shell admin-table-shell routine-table-shell">
+                  <table>
+                    <thead><tr><th>Rotina</th><th>Dias</th><th>Aplicação</th><th>Vigência</th><th>Situação</th><th>Ações</th></tr></thead>
+                    <tbody id="adminRoutinesTable"></tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article id="routineEditor" class="admin-block routine-editor-block hidden" aria-hidden="true">
+                <div class="routine-editor-header">
+                  <div><span class="eyebrow">Editor de rotina</span><h3 id="routineEditorTitle">Nova rotina</h3><p id="routineEditorSubtitle" class="admin-summary">Defina como o sistema reconhecerá e cobrará esta atividade.</p></div>
+                  <button id="closeRoutineEditor" class="icon-button" type="button" aria-label="Fechar editor">×</button>
+                </div>
+                <input id="routineEditorId" type="hidden" />
+                <div class="routine-editor-grid">
+                  <label class="field field-wide"><span>Nome exibido no dashboard *</span><input id="routineName" type="text" maxlength="160" placeholder="Ex.: Conferência da banca de saída" /></label>
+                  <label class="field field-wide"><span>Nome do checklist no Moki *</span><input id="routineMokiName" type="text" maxlength="200" placeholder="Nome exatamente como aparece na planilha" /></label>
+                  <label class="field field-wide"><span>Nomes alternativos</span><textarea id="routineAliases" rows="3" placeholder="Um nome por linha. Use para reconhecer nomes antigos ou variações do Moki."></textarea></label>
+                  <label class="field"><span>Aplicação *</span><select id="routineScope"><option value="todas">Todas as lojas ativas</option><option value="12x36">Somente lojas 12x36</option></select></label>
+                  <label class="field"><span>Início da vigência (obrigatório para nova rotina)</span><input id="routineEffectiveStart" type="date" /></label>
+                  <label class="field"><span>Fim da vigência</span><input id="routineEffectiveEnd" type="date" /></label>
+                  <label class="field"><span>Horário de início</span><input id="routineStartTime" type="time" /></label>
+                  <label class="field"><span>Horário de fim</span><input id="routineEndTime" type="time" /></label>
+                  <label class="field"><span>Tolerância início (min)</span><input id="routineStartTolerance" type="number" min="0" max="1440" step="1" value="0" /></label>
+                  <label class="field"><span>Tolerância fim (min)</span><input id="routineEndTolerance" type="number" min="0" max="1440" step="1" value="0" /></label>
+                </div>
+                <fieldset class="routine-days-fieldset">
+                  <legend>Dias em que a rotina será prevista *</legend>
+                  <div class="routine-days-grid">
+                    <label><input type="checkbox" name="routineDays" value="1" /><span>Seg</span></label>
+                    <label><input type="checkbox" name="routineDays" value="2" /><span>Ter</span></label>
+                    <label><input type="checkbox" name="routineDays" value="3" /><span>Qua</span></label>
+                    <label><input type="checkbox" name="routineDays" value="4" /><span>Qui</span></label>
+                    <label><input type="checkbox" name="routineDays" value="5" /><span>Sex</span></label>
+                    <label><input type="checkbox" name="routineDays" value="6" /><span>Sáb</span></label>
+                    <label><input type="checkbox" name="routineDays" value="0" /><span>Dom</span></label>
+                  </div>
+                </fieldset>
+                <label class="routine-active-toggle"><input id="routineActive" type="checkbox" checked /><span><strong>Rotina habilitada</strong><small>Ao desmarcar, informe a data final da vigência. O histórico anterior será preservado.</small></span></label>
+                <div id="routineEditorMeta" class="routine-editor-meta"></div>
+                <div id="routineEditorFeedback" class="admin-feedback"></div>
+                <div class="routine-editor-actions">
+                  <button id="saveRoutineButton" class="btn btn-primary" type="button">Salvar rotina</button>
+                  <button id="duplicateRoutineButton" class="btn btn-secondary hidden" type="button">Duplicar</button>
+                  <button id="deactivateRoutineButton" class="btn btn-secondary hidden" type="button">Desativar</button>
+                  <button id="deleteRoutineButton" class="btn btn-danger hidden" type="button">Excluir</button>
+                  <button id="cancelRoutineButton" class="btn btn-secondary" type="button">Cancelar</button>
+                </div>
+              </article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="vinculos">
+              <div class="admin-grid two-cols">
+                <div class="admin-block"><span class="eyebrow">Equipe</span><h3>Vincular loja ao formador</h3><div class="stack-fields"><label class="field"><span>Loja</span><select id="adminLojaSelect"></select></label><label class="field"><span>Formador</span><select id="adminFormadorSelect"></select></label><button id="saveLojaVinculo" class="btn btn-primary" type="button">Salvar vínculo</button></div><div id="linkFeedback" class="admin-feedback"></div></div>
+                <div class="admin-block"><span class="eyebrow">Vínculos atuais</span><h3>Responsáveis por unidade</h3><div id="vinculosLista" class="admin-scroll-list"></div></div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="nomes">
+              <div class="admin-grid two-cols">
+                <div class="admin-block"><span class="eyebrow">Padronização</span><h3>Alterar nome de loja</h3><div class="stack-fields"><label class="field"><span>Loja atual</span><select id="renameLojaSelect"></select></label><label class="field"><span>Novo nome</span><input id="renameLojaInput" type="text" placeholder="Digite o novo nome" /></label><button id="saveLojaRename" class="btn btn-primary" type="button">Salvar novo nome</button></div><div id="renameFeedback" class="admin-feedback"></div></div>
+                <div class="admin-block"><span class="eyebrow">Nomes cadastrados</span><h3>Personalizações</h3><div id="renamesLista" class="admin-scroll-list"></div></div>
+              </div>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="historico">
+              <article class="admin-block history-block"><div class="section-head compact-head"><div><span class="eyebrow">Histórico</span><h3>Importações processadas</h3><p class="admin-summary">Consulte, reprocese ou remova datas já importadas.</p></div></div><div id="historicoPlanilhas" class="history-stack"></div></article>
+            </section>
+
+            <section class="admin-tab-panel" data-panel="configuracoes">
+              <div class="admin-grid two-cols">
+                <article class="admin-block"><span class="eyebrow">Armazenamento</span><h3>Política de dados</h3><div class="admin-settings-list"><div><strong>Dados brutos</strong><span>Excluídos automaticamente após 5 dias.</span></div><div><strong>Detalhes recentes</strong><span>Somente os 7 dias mais recentes ficam carregados na abertura.</span></div><div><strong>Resumos históricos</strong><span>Até 740 dias permanecem disponíveis para gráficos e comparações leves.</span></div><div><strong>Datas antigas</strong><span>Os detalhes continuam salvos e são carregados apenas quando consultados.</span></div></div></article>
+                <article class="admin-block"><span class="eyebrow">Desempenho</span><h3>Liberar memória</h3><p class="admin-summary">Remove da memória os detalhes antigos já salvos, preservando todo o histórico no Firebase. O painel volta para a última data importada.</p><button id="optimizeMemory" class="btn btn-primary" type="button">Otimizar sistema agora</button><div id="memoryOptimizationFeedback" class="admin-feedback"></div></article>
+                <article class="admin-block admin-danger-zone"><span class="eyebrow">Ação crítica</span><h3>Limpar dados do painel</h3><p class="admin-summary">Remove todas as importações e resultados armazenados. As configurações de lojas, regionais e rotinas são preservadas.</p><button id="resetData" class="btn btn-danger" type="button">Limpar painel</button></article>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
     </section>
   </div>
 
-  <dialog id="modal" class="modal">
-    <div class="modal-head">
-      <h3 id="modalTitle">Detalhes</h3>
-      <button class="icon-btn" onclick="window.App.closeModal()">×</button>
+  <div id="presentationModal" class="presentation-modal hidden" aria-hidden="true">
+    <div class="presentation-overlay" onclick="window.PainelSF && window.PainelSF.fecharApresentacao()"></div>
+    <div class="presentation-stage">
+      <div class="presentation-topbar">
+        <div>
+          <span class="eyebrow">Modo apresentação</span>
+          <h2 id="presentationTitle">Resumo executivo</h2>
+          <p id="presentationSubtitle" class="presentation-subtitle">Painel automático para TV</p>
+        </div>
+        <div class="presentation-actions">
+          <button id="presentationPrev" class="btn btn-secondary presentation-btn" type="button">←</button>
+          <button id="presentationPlayPause" class="btn btn-primary presentation-btn" type="button">Pausar</button>
+          <button id="presentationNext" class="btn btn-secondary presentation-btn" type="button">→</button>
+          <button id="presentationFullscreen" class="btn btn-secondary presentation-btn" type="button">Tela cheia</button>
+          <button id="presentationClose" class="btn btn-secondary presentation-btn" type="button">Fechar</button>
+        </div>
+      </div>
+
+      <div class="presentation-meta-row">
+        <div id="presentationCounter" class="presentation-counter">Slide 1 de 1</div>
+        <div id="presentationPeriod" class="presentation-period">Resumo mensal</div>
+      </div>
+
+      <div id="presentationContent" class="presentation-content"></div>
+
+      <div class="presentation-footer">
+        <div id="presentationDots" class="presentation-dots"></div>
+        <div id="presentationFilters" class="presentation-filters"></div>
+      </div>
     </div>
-    <div id="modalBody" class="modal-body"></div>
-  </dialog>
+  </div>
+
+  <div id="activeFiltersSummary" class="hidden"></div>
+  <div id="consultaRotinaLojas" class="hidden"></div>
+  <div id="datasetStatus" class="hidden"></div>
+  <div id="importBadge" class="hidden"></div>
+  <table class="hidden"><tbody id="tabelaResumoPromotores"></tbody></table>
+
+  <script src="script.js?v=20260729-data-real-modo-leve-v12" defer></script>
+
+
+<script>
+window.PainelSF = window.PainelSF || {
+  alternarSidebar(force){
+    const abrir = typeof force === 'boolean' ? force : !document.body.classList.contains('sidebar-open');
+    document.body.classList.toggle('sidebar-open', abrir);
+  },
+  abrirAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.remove('hidden'); m.setAttribute('aria-hidden','false'); document.body.classList.add('admin-mode'); } },
+  fecharAdminModal(){ const m=document.getElementById('adminModal'); if(m){ m.classList.add('hidden'); m.setAttribute('aria-hidden','true'); document.body.classList.remove('admin-mode'); } },
+  aplicarPeriodoResumo(periodo){
+    document.querySelectorAll('.summary-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.period===periodo));
+    const di=document.getElementById('filterDataInicial'); const df=document.getElementById('filterDataFinal');
+    const base = new Date();
+    const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if(di && df){
+      if(periodo==='diario'){ di.value=fmt(base); df.value=fmt(base); }
+      else if(periodo==='semanal'){ const ini=new Date(base); ini.setDate(base.getDate()-6); di.value=fmt(ini); df.value=fmt(base); }
+      else { const ini=new Date(base.getFullYear(), base.getMonth(), 1); di.value=fmt(ini); df.value=fmt(base); }
+    }
+  },
+  aplicarFiltrosRapido(){ document.body.classList.remove('sidebar-open'); },
+  limparFiltrosRapido(){ document.querySelectorAll('#filtersSidebar input, #filtersSidebar select').forEach(el=>el.value=''); document.body.classList.remove('sidebar-open'); },
+  abrirApresentacao(){},
+  fecharApresentacao(){},
+  proximoSlideApresentacao(){},
+  slideAnteriorApresentacao(){},
+  alternarAutoplayApresentacao(){},
+  alternarFullscreenApresentacao(){}
+};
+</script>
 </body>
 </html>
